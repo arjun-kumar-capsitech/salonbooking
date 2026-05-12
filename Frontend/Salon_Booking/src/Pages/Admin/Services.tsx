@@ -3,7 +3,7 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { DataTable, StatusBadge } from '../../Components/Ui/Table';  
+import { DataTable, } from '../../Components/Ui/Table';  
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 
@@ -43,14 +43,7 @@ const Service = () => {
     fetchServices();
   }, []);
 
-  const columns = [
-    { title: 'Service Name', dataIndex: 'serviceName', key: 'serviceName' },
-    { title: 'Duration (min)', dataIndex: 'duration', key: 'duration' },
-    { title: 'Price', dataIndex: 'price', key: 'price' },
-    { title: 'Status', dataIndex: 'status', key: 'status', 
-      render: (status: string) => <StatusBadge type="user" value={status} />}
-  ];
-
+ 
   const handleFormSubmit = async (values: any) => {
     const payload = {
       id: editingService?.id || undefined,
@@ -136,7 +129,7 @@ const Service = () => {
         <p className='p-2'>All Services Data</p>
         <DataTable
           data={filteredServices}
-          columns={columns}
+          tableType="services"
           loading={loading}
           onEdit={(record) => {
             setEditingService(record);

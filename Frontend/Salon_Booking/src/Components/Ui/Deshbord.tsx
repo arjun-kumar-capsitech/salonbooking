@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Button, Layout, Menu, Avatar } from 'antd';
-import type { MenuProps } from 'antd';
-import { LogOut, User } from 'lucide-react';
-import { useNavigate, Outlet } from 'react-router-dom';
-import logo from '../Imeges/Copilot_20260327_173847.png';
+import React, {} from "react";
+import { Button, Layout, Menu, Avatar } from "antd";
+import type { MenuProps } from "antd";
+import { LogOut } from "lucide-react";
+import { useNavigate, Outlet } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import logo from "../Imeges/Copilot_20260327_173847.png";
+import { setLogout } from "../../Redux/Store/Slice/authSlice";
+import { resetUserData } from "../../Redux/Store/Slice/userslice";
+import { resetUserContent } from "../../Redux/Store/Slice/userContentSlice";
 
 const { Sider, Content } = Layout;
 
@@ -18,30 +22,22 @@ interface DeshbordProps {
   appName?: string;
 }
 
-interface StoredUser {
-  id: string;
-  fullName?: string;
-  email: string;
-  role?: number | string;
-}
-
 const Deshbord: React.FC<DeshbordProps> = ({
   menuItems,
-  appName = "Salon Manager"
+  appName = "Salon Manager",
 }) => {
   const navigate = useNavigate();
-  const [collapsed] = useState(false);
-  const [userData, setUserData] = useState<StoredUser | null>(null);
+  const dispatch = useDispatch();
+  
+  const { user: authUser } = useSelector((state: any) => state.auth);
+  const { name, role: userRole } = useSelector((state: any) => state.user);
+  
+  const [collapsed] = React.useState(false);
 
-  useEffect(() => {
-    const userString = localStorage.getItem("user");
-    if (userString) {
-      setUserData(JSON.parse(userString));
-    }
-  }, []);
+  const displayName = name || authUser?.fullName || authUser?.name || "Guest";
+  const displayRole = userRole || authUser?.role;
 
-  const getRoleName = (role?: number | string) => {
-    if (typeof role === "string") return role;
+  const getRoleName = (role?: number) => {
     switch (role) {
       case 1: return "Super Admin";
       case 2: return "Admin";
@@ -51,81 +47,102 @@ const Deshbord: React.FC<DeshbordProps> = ({
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    localStorage.removeItem('user');
-    navigate('/');
+  const getFirstLetter = () => {
+    if (displayName && displayName !== "Guest") {
+      return displayName.charAt(0).toUpperCase();
+    }
+    return "U";
   };
 
-  const menuItemsFormatted: MenuProps['items'] = menuItems.map(item => ({
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("userRole");
+    
+ 
+    dispatch(setLogout());
+    dispatch(resetUserData());
+    dispatch(resetUserContent());
+    
+    navigate("/");
+  };
+
+  const menuItemsFormatted: MenuProps["items"] = menuItems.map((item) => ({
     key: item.key,
     icon: item.icon,
     label: item.label,
   }));
 
   return (
-    <>
-      <Layout style={{ height: "100vh" }}>
-        <Sider trigger={null} collapsible collapsed={collapsed}>
-          <div className="flex items-center justify-center pt-4 pb-4">
-            <img
-              src={logo}
-              alt="App Logo"
-              className="w-18 h-18 object-contain pt-3"
-            />
-            <h2 className="text-[21px]  text-white">
-              {appName}
-            </h2>
-          </div>
-
-          <Menu
-            theme="dark"
-            mode="inline"
-            defaultSelectedKeys={[menuItems[0]?.key || '']}
-            items={menuItemsFormatted}
-            onClick={(e) => navigate(e.key)}
+    <Layout className="h-screen overflow-hidden">
+      <Sider 
+        trigger={null} 
+        collapsible 
+        collapsed={collapsed}
+        className="h-screen relative"
+      >
+        <div className="flex items-center justify-center pt-4 pb-4">
+          <img
+            src={logo}
+            alt="App Logo"
+            className="w-18 h-18 object-contain pt-3"
           />
+          <h2 className="text-[21px] text-white">{appName}</h2>
+        </div>
 
-          <div className="p-4 absolute bottom-13">
-            <div className="flex items-center">
-              <Avatar
-                size={collapsed ? 32 : 40}
-                icon={<User className="w-5 h-5" />}
-              />
-              {!collapsed && userData && (
-                <div className="ml-3">
-                  <div className="text-white font-semibold">
-                    {userData.fullName || "Guest"}
-                  </div>
-                  <div className="text-green-300 flex items-center gap-1">
-                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                    {getRoleName(userData.role)}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        <Menu
+          theme="dark"
+          mode="inline"
+          defaultSelectedKeys={[menuItems[0]?.key || ""]}
+          items={menuItemsFormatted}
+          onClick={(e) => navigate(e.key)}
+          className="border-r-0 overflow-y-auto"
+          style={{ height: "calc(100% - 180px)" }}
+        />
 
-          <div className="p-3 absolute bottom-0 left-0 right-0">
-            <Button
-              type="primary"
-              danger
-              block
-              onClick={handleLogout}
-              icon={<LogOut className="w-5 h-5 mt-2" />}
+        <div className="absolute left-0 right-0 bottom-20 p-4">
+          <div className="flex items-center">
+            <Avatar
+              size={collapsed ? 32 : 40}
+              className="flex items-center justify-center"
+              style={{ backgroundColor: '#001d3d' }}
             >
-              {!collapsed && 'Logout'}
-            </Button>
+              {getFirstLetter()}
+            </Avatar>
+            {!collapsed && (
+              <div className="ml-3">
+                <div className="text-white font-semibold">
+                  {displayName}
+                </div>
+                <div className="text-green-300 flex items-center gap-1 text-sm">
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                  {getRoleName(displayRole)}
+                </div>
+              </div>
+            )}
           </div>
-        </Sider>
+        </div>
 
-        <Content>
-          <div style={{ height: "100%", padding: "25px" }}>
-            <Outlet />
-          </div>
-        </Content>
-      </Layout>
-    </>
+        <div className="absolute left-0 right-0 bottom-5 p-4">
+          <Button
+            type="primary"
+            danger
+            block
+            onClick={handleLogout}
+            icon={<LogOut className="w-4 h-4" />}
+            className="flex items-center justify-center gap-2"
+          >
+            {!collapsed && "Logout"}
+          </Button>
+        </div>
+      </Sider>
+
+      <Content className="h-screen overflow-y-auto bg-gray-100">
+        <div className="p-6 min-h-full">
+          <Outlet />
+        </div>
+      </Content>
+    </Layout>
   );
 };
 

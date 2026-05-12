@@ -11,9 +11,7 @@ namespace SalonBackend.Models
         Employee = 3,
         Customer = 4
     }
-
     
-
     public class User
     {
         [BsonId]
@@ -58,7 +56,7 @@ namespace SalonBackend.Models
         }
 
         private string _salonName = string.Empty;
-        public string SalonName
+        public string SalonName 
         {
             get => _salonName;
             set => _salonName = string.IsNullOrWhiteSpace(value)

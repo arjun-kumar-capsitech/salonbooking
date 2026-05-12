@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Button, Input, message, Modal } from 'antd';
-import { SearchOutlined, PlusOutlined, ShopOutlined, UserOutlined, MailOutlined, PhoneOutlined, EnvironmentOutlined, LockOutlined } from '@ant-design/icons';
-import Modals from '../../Components/Ui/Modals';
-import { InputField } from '../../Components/Ui/Forms';
-import { DataTable } from '../../Components/Ui/Table';
-import axios from 'axios';
+import { useEffect, useState } from "react";
+import {  Button,Input,message,Modal,Card,Form} from "antd";
+import {SearchOutlined, PlusOutlined,ShopOutlined,UserOutlined,EnvironmentOutlined,LockOutlined, MailOutlined,PhoneOutlined} from "@ant-design/icons";
+import axios from "axios";
+import { showSuperAdminCompani,} from "../../Redux/Store/Slice/columnsSlice";
+import { useDispatch } from "react-redux";
+import Modals from "../../Components/Ui/Modals";
+import { InputField } from "../../Components/Ui/Forms";
+import { DataTable } from "../../Components/Ui/Table";
 
 const { confirm } = Modal;
 
@@ -19,23 +21,42 @@ interface Admin {
   role: number;
 }
 
-const API_URL = 'http://localhost:5296/api/User';
+const API_URL = "http://localhost:5296/api/User";
 
 const Compani = () => {
+  const dispatch = useDispatch();
+  const [form] = Form.useForm();
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState<Admin | null>(null);
-  const [searchText, setSearchText] = useState('');
+  const [selectedAdmin, setSelectedAdmin] =useState<Admin | null>(null);
+  const [searchText, setSearchText] = useState("");
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [loading, setLoading] = useState(false);
-
+  useEffect(() => {
+    dispatch(showSuperAdminCompani());
+  }, [dispatch]);
   const loadAdmins = async () => {
     setLoading(true);
+
     try {
       const response = await axios.get(API_URL);
-      const filtered = response.data.filter((u: any) => u.role === 2);
+      const filtered = response.data
+        .filter((u: any) => u.role === 2)
+        .map((u: any, index: number) => ({
+          key: u.id || index,
+          id: u.id,
+          companyName: u.salonName,
+          owner: u.fullName,
+          email: u.email,
+          phone: u.phoneNumber,
+          status: u.isActive
+            ? "active"
+            : "inactive",
+          salonAddress: u.salonAddress,
+        }));
+
       setAdmins(filtered);
     } catch (error) {
-      message.error('Failed to load admins');
+      message.error("Failed to load admins");
     } finally {
       setLoading(false);
     }
@@ -44,177 +65,201 @@ const Compani = () => {
   useEffect(() => {
     loadAdmins();
   }, []);
-
-  const handleFormSubmit = async (values: any) => {
+  const handleFormSubmit = async (
+    values: any
+  ) => {
     try {
       if (selectedAdmin) {
-        await axios.put(`${API_URL}/${selectedAdmin.id}`, {
-          fullName: values.fullName,
-          email: values.email,
-          phoneNumber: values.phoneNumber,
-          salonName: values.salonName,
-          salonAddress: values.salonAddress,
-          role: 2,
-          isActive: true
-        });
-        message.success('Admin updated successfully');
+        await axios.put(
+          `${API_URL}/${selectedAdmin.id}`,
+          {
+            fullName: values.owner,
+            email: values.email,
+            phoneNumber: values.phone,
+            salonName: values.companyName,
+            salonAddress:
+              values.salonAddress,
+            role: 2,
+            isActive:
+              values.status === "active",
+          }
+        );
+        message.success(
+          "Company updated successfully"
+        );
       } else {
-        await axios.post(`${API_URL}/register/admin`, {
-          fullName: values.fullName,
-          email: values.email,
-          phoneNumber: values.phoneNumber,
-          salonName: values.salonName,
-          salonAddress: values.salonAddress,
-          password: values.password,
-          confirmPassword: values.confirmPassword
-        });
-        message.success('Admin registered successfully');
+        await axios.post(
+          `${API_URL}/register/admin`,
+          {
+            fullName: values.owner,
+            email: values.email,
+            phoneNumber: values.phone,
+            salonName: values.companyName,
+            salonAddress:
+              values.salonAddress,
+            password: values.password,
+            confirmPassword:
+              values.confirmPassword,
+          }
+        );
+        message.success(
+          "Company added successfully"
+        );
       }
       loadAdmins();
       setModalVisible(false);
       setSelectedAdmin(null);
+      form.resetFields();
     } catch (error: any) {
-      message.error(error.response?.data?.message || 'Operation failed');
+      message.error(
+        error.response?.data?.message ||
+          "Operation failed"
+      );
     }
   };
 
-  const handleDelete = (record: Admin) => {
+  const handleDelete = (record: any) => {
     confirm({
-      title: 'Delete Admin',
-      content: `Are you sure you want to delete ${record.fullName}?`,
+      title: "Delete Company",
+      content: `Are you sure you want to delete ${record.owner}?`,
       async onOk() {
         try {
-          await axios.delete(`${API_URL}/${record.id}`);
-          message.success('Admin deleted successfully');
+          await axios.delete(
+            `${API_URL}/${record.id}`
+          );
+          message.success(
+            "Company deleted successfully"
+          );
           loadAdmins();
         } catch (error) {
-          message.error('Failed to delete admin');
+          message.error(
+            "Failed to delete company"
+          );
         }
-      }
+      },
     });
   };
 
-  const filteredAdmins = admins.filter(admin =>
-    admin.fullName?.toLowerCase().includes(searchText.toLowerCase()) ||
-    admin.email?.toLowerCase().includes(searchText.toLowerCase()) ||
-    admin.salonName?.toLowerCase().includes(searchText.toLowerCase()) ||
-    admin.salonAddress?.toLowerCase().includes(searchText.toLowerCase())
-  );
 
-  const columns = [
-    {
-      title: 'Salon Name',
-      dataIndex: 'salonName',
-      render: (name: string, record: Admin) => (
-        <div className="flex items-center">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-            <ShopOutlined className="text-blue-600" />
-          </div>
-          <div>
-            <div className="font-medium">{name || '-'}</div>
-            {record.salonAddress && (
-              <div className="text-xs text-gray-500 flex items-center gap-1">
-                <EnvironmentOutlined className="text-gray-400" />
-                {record.salonAddress}
-              </div>
-            )}
-          </div>
-        </div>
-      )
-    },
-    {
-      title: 'Owner Name',
-      dataIndex: 'fullName',
-      render: (fullName: string) => (
-        <div className="flex items-center">
-          <UserOutlined className="text-gray-400 mr-2" />
-          <span className="font-medium">{fullName}</span>
-        </div>
-      )
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      render: (email: string) => (
-        <div className="flex items-center">
-          <MailOutlined className="text-gray-400 mr-2" />
-          <span>{email}</span>
-        </div>
-      )
-    },
-    {
-      title: 'Phone',
-      dataIndex: 'phoneNumber',
-      render: (phone: string) => (
-        <div className="flex items-center">
-          <PhoneOutlined className="text-gray-400 mr-2" />
-          <span>{phone}</span>
-        </div>
-      )
-    }
-  ];
+  const filteredAdmins = admins.filter(
+    (admin: any) =>
+      admin.companyName
+        ?.toLowerCase()
+        .includes(searchText.toLowerCase()) ||
+      admin.owner
+        ?.toLowerCase()
+        .includes(searchText.toLowerCase()) ||
+      admin.email
+        ?.toLowerCase()
+        .includes(searchText.toLowerCase()) ||
+      admin.phone
+        ?.toLowerCase()
+        .includes(searchText.toLowerCase())
+  );
 
   return (
     <>
       <div className="p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Companis Management</h1>
-          <p className="text-gray-600">Manage all salon Companis</p>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-2xl font-bold">
+              Companies Management
+            </h1>
 
-          <div className="flex justify-between items-center mb-6 gap-4 mt-10">
-            <Input
-              placeholder="Search by name, email, salon or address..."
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              className="w-64"
-            />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={() => {
-                setSelectedAdmin(null);
-                setModalVisible(true);
-              }}
-            >
-              Add Companis
-            </Button>
+            <p className="text-gray-600">
+              Manage all salon companies
+            </p>
           </div>
+
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setSelectedAdmin(null);
+
+              form.resetFields();
+
+              setModalVisible(true);
+            }}
+          >
+            Add Company
+          </Button>
         </div>
 
-        <DataTable
-          data={filteredAdmins}
-          columns={columns}
-          loading={loading}
-          onEdit={(record) => {
-            setSelectedAdmin(record);
-            setModalVisible(true);
-          }}
-          onDelete={handleDelete}
-          showActions={true}
-          rowKey="id"
-        />
+        <Card className="mb-6">
+          <Input
+            placeholder="Search company"
+            prefix={<SearchOutlined />}
+            style={{ width: 300 }}
+            value={searchText}
+            onChange={(e) =>
+              setSearchText(e.target.value)
+            }
+          />
+        </Card>
+
+        <Card>
+          <p className="p-2">
+            All Companies Data
+          </p>
+
+          <DataTable
+            data={filteredAdmins}
+            tableType="companies"
+            loading={loading}
+            onEdit={(record: any) => {
+              setSelectedAdmin(record);
+
+              form.setFieldsValue(record);
+
+              setModalVisible(true);
+            }}
+            onDelete={handleDelete}
+            showActions={true}
+            rowKey="key"
+          />
+        </Card>
 
         <Modals
+          form={form}
           open={modalVisible}
           onClose={() => {
             setModalVisible(false);
+
             setSelectedAdmin(null);
+
+            form.resetFields();
           }}
           title={
             <div className="flex items-center gap-2">
               <ShopOutlined />
-              {selectedAdmin ? 'Edit Companis' : 'Add New Companis'}
+
+              {selectedAdmin
+                ? "Edit Company"
+                : "Add Company"}
             </div>
           }
           onSubmit={handleFormSubmit}
-          submitText={selectedAdmin ? 'Update Companis' : 'Add Companis'}
+          submitText={
+            selectedAdmin
+              ? "Update Company"
+              : "Add Company"
+          }
           width={500}
         >
           <InputField
+            label="Company Name"
+            name="companyName"
+            placeholder="Enter company name"
+            required={true}
+            prefix={<ShopOutlined />}
+          />
+
+          <InputField
             label="Owner Name"
-            name="fullName"
-            placeholder="Enter owner's name"
+            name="owner"
+            placeholder="Enter owner name"
             required={true}
             prefix={<UserOutlined />}
           />
@@ -223,31 +268,23 @@ const Compani = () => {
             label="Email"
             name="email"
             type="email"
-            placeholder="owner@salon.com"
+            placeholder="Enter email"
             required={true}
             prefix={<MailOutlined />}
           />
 
           <InputField
-            label="Phone Number"
-            name="phoneNumber"
-            placeholder="+91 9876543210"
+            label="Phone"
+            name="phone"
+            placeholder="Enter phone number"
             required={true}
             prefix={<PhoneOutlined />}
           />
 
           <InputField
-            label="Salon Name"
-            name="salonName"
-            placeholder="Enter salon name"
-            required={true}
-            prefix={<ShopOutlined />}
-          />
-
-          <InputField
             label="Salon Address"
             name="salonAddress"
-            placeholder="Complete address with city and pincode"
+            placeholder="Enter salon address"
             required={true}
             prefix={<EnvironmentOutlined />}
           />
@@ -262,6 +299,7 @@ const Compani = () => {
                 required={true}
                 prefix={<LockOutlined />}
               />
+
               <InputField
                 label="Confirm Password"
                 name="confirmPassword"

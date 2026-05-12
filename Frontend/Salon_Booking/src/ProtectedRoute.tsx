@@ -1,35 +1,23 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
+import { useSelector } from "react-redux";
 import { Navigate } from "react-router-dom";
 
-interface ProtectedRouteProps {
+interface Props {
   children: ReactNode;
-  allowedRoles?: string[]; 
+  allowedRoles?: number[];
 }
 
-const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
-  const token = localStorage.getItem("authToken");
-  const rawRole = localStorage.getItem("userRole"); 
-  const getRoleName = (roleString: string | null) => {
-    switch (roleString) {
-      case "1": return "SuperAdmin";
-      case "2": return "Admin";
-      case "3": return "Employee";
-      case "4": return "Customer";
-      default: return null;
-    }
-  };
+const ProtectedRoute = ({ children, allowedRoles }: Props) => {
+  const { token, user } = useSelector((state: any) => state.auth);
 
-  const userRole = getRoleName(rawRole);
   if (!token) return <Navigate to="/" replace />;
 
-  if (allowedRoles && userRole !== null && !allowedRoles.includes(userRole)) {
-    const dashboardMap: Record<string, string> = {
-      SuperAdmin: "/super-admin/deshbord",
-      Admin: "/admin/dashboard",
-      Employee: "/employee/deshbord",
-      Customer: "/customer/booking",
-    };
-    return <Navigate to={dashboardMap[userRole] || "/"} replace />;
+  if (allowedRoles && allowedRoles.length > 0) {
+    if (!user) return <Navigate to="/" replace />;
+
+    if (!allowedRoles.includes(user.role)) {
+      return <Navigate to="/" replace />;
+    }
   }
 
   return <>{children}</>;

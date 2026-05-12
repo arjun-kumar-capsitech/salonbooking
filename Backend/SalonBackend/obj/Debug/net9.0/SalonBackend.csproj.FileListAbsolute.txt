@@ -110,3 +110,4 @@ C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\ob
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.genruntimeconfig.cache
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\ref\SalonBackend.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\BCrypt.Net-Next.dll
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.sourcelink.json

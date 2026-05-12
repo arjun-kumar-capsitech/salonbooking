@@ -44,7 +44,6 @@ const ServicePage: React.FC = () => {
       const users = userRes.data;
       const servicesList = serviceRes.data;
 
-      // ✅ NO FILTER (ALL DATA)
       const mapped = bookingRes.data.map((b: any) => {
 
         const customer = users.find(

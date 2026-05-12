@@ -50,17 +50,14 @@ namespace SalonBackend.Services
                 User = user
             };
         }
-
         public async Task<AuthResult> RegisterCustomerAsync(RegisterCustomerRequest request)
         {
             return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, "", "", request.Password, UserRole.Customer);
         }
-
         public async Task<AuthResult> RegisterAdminAsync(RegisterAdminRequest request)
         {
             return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, request.SalonName, request.SalonAddress, request.Password, UserRole.Admin);
         }
-
         public async Task<AuthResult> RegisterSuperAdminAsync(RegisterSuperAdminRequest request)
         {
             var exists = await _users.Find(u => u.Role == UserRole.SuperAdmin).AnyAsync();
@@ -190,30 +187,30 @@ namespace SalonBackend.Services
 
         private string GenerateJwtToken(User user)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(
-                _configuration["Jwt:Secret"] ?? "your-secret-key-minimum-32-characters-long-here"
-            );
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.ASCII.GetBytes(
+        _configuration["Jwt:Secret"] ?? "your-secret-key-minimum-32-characters-long-here"
+        );
 
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, user.Id),
-                    new Claim(ClaimTypes.Name, user.FullName),
-                    new Claim(ClaimTypes.Email, user.Email),
-                    new Claim(ClaimTypes.Role, user.Role.ToString()),
-                    new Claim("SalonName", user.SalonName ?? "")
-                }),
-                Expires = DateTime.UtcNow.AddDays(7),
-                SigningCredentials = new SigningCredentials(
-                    new SymmetricSecurityKey(key),
-                    SecurityAlgorithms.HmacSha256Signature
-                )
-            };
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+        Subject = new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id),
+            new Claim(ClaimTypes.Name, user.FullName),
+            new Claim(ClaimTypes.Email, user.Email),
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim("SalonName", user.SalonName ?? "")
+        }),
+        Expires = DateTime.UtcNow.AddHours(5), 
+        SigningCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(key),
+            SecurityAlgorithms.HmacSha256Signature
+        )
+        };
 
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            return tokenHandler.WriteToken(token);
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        return tokenHandler.WriteToken(token);
         }
     }
 }

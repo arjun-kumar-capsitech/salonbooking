@@ -1,17 +1,17 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import './App.css';
-import App from './App.tsx';
-import { BrowserRouter } from 'react-router-dom';
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { Provider } from "react-redux";
+import { store } from "./Redux/Store/Store";
+import App from "./App";
+import "./App.css";
 
-const rootElement = document.getElementById('root');
-
-if (rootElement) {
-  createRoot(rootElement).render(
+createRoot(document.getElementById("root")!).render(
+  <Provider store={store}>
     <StrictMode>
       <BrowserRouter>
-        <App/>
+        <App />
       </BrowserRouter>
     </StrictMode>
-  );
-}
+  </Provider>
+);
