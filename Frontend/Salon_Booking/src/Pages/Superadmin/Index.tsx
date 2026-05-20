@@ -3,11 +3,12 @@ import { LayoutDashboard, Users, Building2, BarChart3 } from 'lucide-react';
 import Deshbord from '../../Components/Ui/Deshbord';
 import { useDispatch, useSelector } from 'react-redux';
 import { setPermissionsByRole } from '../../Redux/Store/Slice/userContentSlice';
+import { authData } from '../../Redux/Store/Store';
 
 const Index: React.FC = () => {
   const dispatch = useDispatch();
 
-  const { user } = useSelector((state: any) => state.auth);
+  const { user } = useSelector((authData));
 
   useEffect(() => {
     if (user?.role) {

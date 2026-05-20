@@ -15,6 +15,12 @@ namespace SalonBackend.Services
         public async Task<List<AdminServices>> GetAllAsync() =>
             await _collection.Find(_ => true).ToListAsync();
 
+        public async Task<List<AdminServices>> GetBySalonNameAsync(string salonName) =>
+            await _collection.Find(x => x.SalonName == salonName).ToListAsync();
+
+        public async Task<List<AdminServices>> GetActiveBySalonNameAsync(string salonName) =>
+            await _collection.Find(x => x.SalonName == salonName && x.IsActive == true).ToListAsync();
+
         public async Task<AdminServices?> GetByIdAsync(string id) =>
             await _collection.Find(x => x.Id == id).FirstOrDefaultAsync();
 

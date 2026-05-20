@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Card, Input, Select, message } from "antd";
-import {SearchOutlined, MailOutlined} from "@ant-design/icons";
+import { SearchOutlined, MailOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { useDispatch } from "react-redux";
-import {showSuperAdminUser,} from "../../Redux/Store/Slice/columnsSlice";
-import {DataTable,StatusBadge,} from "../../Components/Ui/Table";
+import { showSuperAdminUser, } from "../../Redux/Store/Slice/columnsSlice";
+import { DataTable, StatusBadge, } from "../../Components/Ui/Table";
 
 const { Option } = Select;
 const User = () => {
@@ -214,8 +214,8 @@ const User = () => {
       render: (date: string) =>
         date
           ? dayjs(date).format(
-              "DD MMM YYYY hh:mm A"
-            )
+            "DD MMM YYYY hh:mm A"
+          )
           : "-",
     },
   ];

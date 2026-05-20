@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import {Button,Input,message,Modal,Card} from "antd";
-import {SearchOutlined,CheckOutlined,CloseOutlined,ShopOutlined,} from "@ant-design/icons";
+import { Button, Input, message, Modal, Card,} from "antd";
+import { SearchOutlined, CheckOutlined, CloseOutlined, ShopOutlined } from "@ant-design/icons";
 import axios from "axios";
 import { useDispatch } from "react-redux";
-import {showSuperAdminRequest,} from "../../Redux/Store/Slice/columnsSlice";
-import { DataTable,StatusBadge} from "../../Components/Ui/Table";
+import { showSuperAdminRequest } from "../../Redux/Store/Slice/columnsSlice";
+import { DataTable } from "../../Components/Ui/Table";
 
 interface SalonRequest {
   id: string;
@@ -16,21 +16,46 @@ interface SalonRequest {
 }
 
 const API_URL = "http://localhost:5296/api/User";
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const getStatusColor = () => {
+    switch (status) {
+      case "approved":
+        return { bg: "#f6ffed", color: "#52c41a", text: "Approved" };
+      case "rejected":
+        return { bg: "#fff2f0", color: "#ff4d4f", text: "Rejected" };
+      case "pending":
+      default:
+        return { bg: "#fff7e6", color: "#faad14", text: "Pending" };
+    }
+  };
+
+  const { bg, color, text } = getStatusColor();
+
+  return (
+    <span
+      style={{
+        backgroundColor: bg,
+        color: color,
+        padding: "4px 12px",
+        borderRadius: "20px",
+        fontSize: "12px",
+        fontWeight: 500,
+        display: "inline-block",
+      }}
+    >
+      {text}
+    </span>
+  );
+};
+
 const Request = () => {
   const dispatch = useDispatch();
   const [searchText, setSearchText] = useState("");
-  const [requests, setRequests] = useState<
-    SalonRequest[]
-  >([]);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [viewModalVisible, setViewModalVisible] =
-    useState(false);
-
-  const [selectedRequest, setSelectedRequest] =
-    useState<SalonRequest | null>(null);
+  const [requests, setRequests] = useState<SalonRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [viewModalVisible, setViewModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<SalonRequest | null>(null);
 
   useEffect(() => {
     dispatch(showSuperAdminRequest());
@@ -38,34 +63,24 @@ const Request = () => {
 
   const loadRequests = async () => {
     setLoading(true);
-
     try {
       const res = await axios.get(API_URL);
-
-      const savedStatus = JSON.parse(
-        localStorage.getItem("salonStatus") ||
-          "{}"
-      );
+      const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
 
       const formatted = res.data
         .filter((u: any) => u.role === 2)
         .map((u: any) => ({
-          id: u.id,
-          companyName: u.salonName,
-          owner: u.fullName,
-          email: u.email,
-          requestDate:
-            u.createdAt ||
-            new Date().toISOString(),
-          status:
-            savedStatus[u.id] || "pending",
+          id: u.id || u._id,
+          companyName: u.SalonName || u.salonName,
+          owner: u.FullName || u.fullName,
+          email: u.Email || u.email,
+          requestDate: u.CreatedAt || u.createdAt || new Date().toISOString(),
+          status: savedStatus[u.id || u._id] || "pending",
         }));
 
       setRequests(formatted);
     } catch {
-      message.error(
-        "Failed to load requests"
-      );
+      message.error("Failed to load requests");
     } finally {
       setLoading(false);
     }
@@ -77,222 +92,170 @@ const Request = () => {
 
   const filteredRequests = requests.filter(
     (r) =>
-      r.companyName
-        ?.toLowerCase()
-        .includes(searchText.toLowerCase()) ||
-      r.owner
-        ?.toLowerCase()
-        .includes(searchText.toLowerCase())
+      r.companyName?.toLowerCase().includes(searchText.toLowerCase()) ||
+      r.owner?.toLowerCase().includes(searchText.toLowerCase())
   );
 
   const handleApprove = (id: string) => {
     const updated = requests.map((r) =>
-      r.id === id
-        ? {
-            ...r,
-            status: "approved",
-          }
-        : r
+      r.id === id ? { ...r, status: "approved" } : r
     );
-
     setRequests(updated);
 
-    const saved = JSON.parse(
-      localStorage.getItem("salonStatus") ||
-        "{}"
-    );
-
+    const saved = JSON.parse(localStorage.getItem("salonStatus") || "{}");
     saved[id] = "approved";
+    localStorage.setItem("salonStatus", JSON.stringify(saved));
 
-    localStorage.setItem(
-      "salonStatus",
-      JSON.stringify(saved)
-    );
-
-    message.success("Request Approved");
+    message.success("Request Approved Successfully");
   };
 
   const handleReject = (id: string) => {
     const updated = requests.map((r) =>
-      r.id === id
-        ? {
-            ...r,
-            status: "rejected",
-          }
-        : r
+      r.id === id ? { ...r, status: "rejected" } : r
     );
-
     setRequests(updated);
 
-    const saved = JSON.parse(
-      localStorage.getItem("salonStatus") ||
-        "{}"
-    );
-
+    const saved = JSON.parse(localStorage.getItem("salonStatus") || "{}");
     saved[id] = "rejected";
-
-    localStorage.setItem(
-      "salonStatus",
-      JSON.stringify(saved)
-    );
+    localStorage.setItem("salonStatus", JSON.stringify(saved));
 
     message.success("Request Rejected");
   };
 
-  return (
-    <>
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">
-              Salon Requests
-            </h1>
-            <p className="text-gray-600">
-              Manage salon registration requests
-            </p>
-          </div>
+  const columns = [
+    {
+      title: "Company Name",
+      dataIndex: "companyName",
+      render: (text: string, record: SalonRequest) => (
+        <div>
+          <div className="font-medium">{text}</div>
+          <div className="text-gray-500 text-sm">Owner: {record.owner}</div>
         </div>
+      ),
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+    },
+    {
+      title: "Request Date",
+      dataIndex: "requestDate",
+      render: (date: string) => new Date(date).toLocaleDateString(),
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (status: string) => <StatusBadge status={status} />,
+    },
+  ];
 
-        <Card className="mb-6">
-          <Input
-            placeholder="Search requests"
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e) =>
-              setSearchText(e.target.value)
-            }
-            style={{ width: 300 }}
-          />
-        </Card>
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">Salon Requests</h1>
+          <p className="text-gray-600">Manage salon registration requests</p>
+        </div>
+      </div>
 
-        <Card>
-          <p className="p-2">
-            All Request Data
-          </p>
-          <DataTable
-            data={filteredRequests}
-            tableType="requests"
-            loading={loading}
-            rowKey="id"
-            showActions={true}
-            onView={(record) => {
-              setSelectedRequest(record);
-              setViewModalVisible(true);
-            }}
-          />
-        </Card>
+      <Card className="mb-6">
+        <Input
+          placeholder="Search by company or owner name"
+          prefix={<SearchOutlined />}
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          style={{ width: 350 }}
+        />
+      </Card>
 
-        <Modal
-          title="Request Details"
-          open={viewModalVisible}
-          onCancel={() => {
-            setViewModalVisible(false);
-            setSelectedRequest(null);
+      <Card>
+        <p className="p-2 font-medium">All Request Data ({requests.length})</p>
+        <DataTable
+          data={filteredRequests}
+          columns={columns}
+          loading={loading}
+          rowKey="id"
+          showActions={true}
+          onView={(record) => {
+            setSelectedRequest(record);
+            setViewModalVisible(true);
           }}
-          footer={null}
-          centered
-        >
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
-                  <ShopOutlined className="text-blue-600 text-xl" />
-                </div>
+        />
+      </Card>
 
-                <div>
-                  <h3 className="text-lg font-bold">
-                    {
-                      selectedRequest.companyName
-                    }
-                  </h3>
-                </div>
+      <Modal
+        title="Request Details"
+        open={viewModalVisible}
+        onCancel={() => {
+          setViewModalVisible(false);
+          setSelectedRequest(null);
+        }}
+        footer={null}
+        centered
+        width={500}
+      >
+        {selectedRequest && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-4 pb-3 border-b">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                <ShopOutlined className="text-blue-600 text-xl" />
               </div>
-
               <div>
-                <div className="text-sm text-gray-500">
-                  Owner
-                </div>
-
-                <div className="font-medium">
-                  {selectedRequest.owner}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm text-gray-500">
-                  Email
-                </div>
-
-                <div>
-                  {selectedRequest.email}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm text-gray-500">
-                  Request Date
-                </div>
-
-                <div>
-                  {
-                    selectedRequest.requestDate
-                  }
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm text-gray-500 mb-1">
-                  Status
-                </div>
-
-                <StatusBadge
-                  type="booking"
-                  value={
-                    selectedRequest.status
-                  }
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t">
-                <Button
-                  type="primary"
-                  icon={<CheckOutlined />}
-                  onClick={() => {
-                    handleApprove(
-                      selectedRequest.id
-                    );
-
-                    setViewModalVisible(
-                      false
-                    );
-                  }}
-                  className="flex-1"
-                >
-                  Approve
-                </Button>
-
-                <Button
-                  danger
-                  icon={<CloseOutlined />}
-                  onClick={() => {
-                    handleReject(
-                      selectedRequest.id
-                    );
-
-                    setViewModalVisible(
-                      false
-                    );
-                  }}
-                  className="flex-1"
-                >
-                  Reject
-                </Button>
+                <h3 className="text-lg font-bold">{selectedRequest.companyName}</h3>
+                <p className="text-gray-500 text-sm">Salon Registration Request</p>
               </div>
             </div>
-          )}
-        </Modal>
-      </div>
-    </>
+
+            <div>
+              <div className="text-sm text-gray-500 mb-1">Owner Name</div>
+              <div className="font-medium text-base">{selectedRequest.owner}</div>
+            </div>
+
+            <div>
+              <div className="text-sm text-gray-500 mb-1">Email Address</div>
+              <div className="text-base">{selectedRequest.email}</div>
+            </div>
+
+            <div>
+              <div className="text-sm text-gray-500 mb-1">Request Date</div>
+              <div className="text-base">{new Date(selectedRequest.requestDate).toLocaleDateString()}</div>
+            </div>
+
+            <div>
+              <div className="text-sm text-gray-500 mb-1">Current Status</div>
+              <StatusBadge status={selectedRequest.status} />
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t mt-2">
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                onClick={() => {
+                  handleApprove(selectedRequest.id);
+                  setViewModalVisible(false);
+                }}
+                className="flex-1"
+                style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+              >
+                Approve Request
+              </Button>
+
+              <Button
+                danger
+                icon={<CloseOutlined />}
+                onClick={() => {
+                  handleReject(selectedRequest.id);
+                  setViewModalVisible(false);
+                }}
+                className="flex-1"
+              >
+                Reject Request
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import { Form, Input,TimePicker,Button,Tabs,Row,Col,Switch,Card,message} from "antd";
+import { Form, Input, TimePicker, Button, Tabs, Row, Col, Switch, Card, message } from "antd";
 import { SaveOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import dayjs, { Dayjs } from "dayjs";
@@ -233,8 +233,8 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-2">
-      <div className="mb-3">
+    <div className="p-1">
+      <div className="mb-2">
         <h1 className="text-2xl font-semibold">
           Salon Settings
         </h1>
@@ -354,7 +354,7 @@ const Settings = () => {
                             ...prev,
                             [selectedDay]: {
                               ...prev[
-                                selectedDay
+                              selectedDay
                               ],
                               isOpen:
                                 checked
@@ -370,53 +370,53 @@ const Settings = () => {
                   </div>
                   {timings[selectedDay]
                     ?.isOpen && (
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <div className="text-sm text-gray-500 mb-1">
-                          Opening Time
+                      <div className="flex gap-4">
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-500 mb-1">
+                            Opening Time
+                          </div>
+                          <TimePicker
+                            value={getTimeValue(
+                              timings[
+                                selectedDay
+                              ]?.opening
+                            )}
+                            format="HH:mm"
+                            style={{
+                              width: "100%"
+                            }}
+                            onChange={time =>
+                              handleTimeChange(
+                                time,
+                                "opening"
+                              )
+                            }
+                          />
                         </div>
-                        <TimePicker
-                          value={getTimeValue(
-                            timings[
-                              selectedDay
-                            ]?.opening
-                          )}
-                          format="HH:mm"
-                          style={{
-                            width: "100%"
-                          }}
-                          onChange={time =>
-                            handleTimeChange(
-                              time,
-                              "opening"
-                            )
-                          }
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-sm text-gray-500 mb-1">
-                          Closing Time
+                        <div className="flex-1">
+                          <div className="text-sm text-gray-500 mb-1">
+                            Closing Time
+                          </div>
+                          <TimePicker
+                            value={getTimeValue(
+                              timings[
+                                selectedDay
+                              ]?.closing
+                            )}
+                            format="HH:mm"
+                            style={{
+                              width: "100%"
+                            }}
+                            onChange={time =>
+                              handleTimeChange(
+                                time,
+                                "closing"
+                              )
+                            }
+                          />
                         </div>
-                        <TimePicker
-                          value={getTimeValue(
-                            timings[
-                              selectedDay
-                            ]?.closing
-                          )}
-                          format="HH:mm"
-                          style={{
-                            width: "100%"
-                          }}
-                          onChange={time =>
-                            handleTimeChange(
-                              time,
-                              "closing"
-                            )
-                          }
-                        />
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
 
                 <div className="mt-25 flex gap-2 justify-end">

@@ -6,5 +6,7 @@ namespace SalonBackend.Models.Dtos
         public int Duration { get; set; }
         public decimal Price { get; set; }
         public bool IsActive { get; set; } = true;
+        public string SalonName { get; set; } = string.Empty;
+
     }
 }

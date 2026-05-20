@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { StatCard } from '../../Components/Ui/Cards';
 import { useEffect, useState } from 'react';
-import { Card, Button, Row, Col,} from 'antd';
+import { Card, Button, Row, Col, } from 'antd';
 import axios from 'axios';
 
 
@@ -15,12 +15,16 @@ const AdminIndex = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
-
   const BOOKING_API = "http://localhost:5296/api/Booking";
   const STAFF_API = "http://localhost:5296/api/Staff";
   const SERVICE_API = "http://localhost:5296/api/AdminServices";
-
   const token = localStorage.getItem("authToken");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user?.Role || user?.role;
+  const userSalonName = user?.SalonName || user?.salonName;
+  const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
+  const isSuperAdmin = userRole === "SuperAdmin";
+
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -31,11 +35,21 @@ const AdminIndex = () => {
     setLoading(true);
     try {
       const res = await axios.get(STAFF_API, axiosConfig);
-      const normalized = res.data.map((s: any, index: any) => ({
+
+      let filteredStaff = res.data;
+      if (isAdmin && !isSuperAdmin) {
+        if (userSalonName) {
+          filteredStaff = res.data.filter((s: any) =>
+            (s.SalonName || s.salonName) === userSalonName
+          );
+        }
+      }
+
+      const normalized = filteredStaff.map((s: any, index: any) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
-        name: s.name,
-        role: s.role === 3 ? "Employee" : "Staff",
+        name: s.FullName || s.fullName || s.name || "N/A",
+        role: s.Role || s.role || "Employee",
         status: s.isActive ? 'active' : 'inactive'
       }));
       setStaffList(normalized);
@@ -49,7 +63,18 @@ const AdminIndex = () => {
   const fetchServices = async () => {
     try {
       const res = await axios.get(SERVICE_API, axiosConfig);
-      const normalized = res.data.map((s: any, index: number) => ({
+
+      let filteredServices = res.data;
+
+      if (isAdmin && !isSuperAdmin) {
+        if (userSalonName) {
+          filteredServices = res.data.filter((s: any) =>
+            (s.SalonName || s.salonName) === userSalonName
+          );
+        }
+      }
+
+      const normalized = filteredServices.map((s: any, index: number) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
         name: s.serviceName || s.name || "N/A",
@@ -66,35 +91,46 @@ const AdminIndex = () => {
   const fetchBookings = async () => {
     try {
       const res = await axios.get(BOOKING_API, axiosConfig);
-      const mapped = res.data.map((b: any, index: number) => {
+
+      let filteredBookings = res.data;
+
+      if (isAdmin && !isSuperAdmin) {
+        if (userSalonName) {
+          filteredBookings = res.data.filter((b: any) =>
+            (b.SalonName || b.salonName) === userSalonName
+          );
+        }
+      }
+
+      const mapped = filteredBookings.map((b: any, index: number) => {
         let amount = 0;
         if (b.amount) amount = parseFloat(b.amount);
         else if (b.totalAmount) amount = parseFloat(b.totalAmount);
         else if (b.price) amount = parseFloat(b.price);
         else if (b.Amount) amount = parseFloat(b.Amount);
-        
+
         return {
           id: b.id || b._id || index,
           amount: isNaN(amount) ? 0 : amount,
-          date: b.appointmentDate || b.createdAt || new Date()
+          date: b.AppointmentDate || b.appointmentDate || b.createdAt || new Date()
         };
       });
       setBookings(mapped);
-      
+
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const revenueByMonth = new Array(12).fill(0);
-      
+
       mapped.forEach((booking: any) => {
         const month = new Date(booking.date).getMonth();
         revenueByMonth[month] += booking.amount;
       });
-      
+
       const chartData = months.map((month, index) => ({
         month,
         revenue: revenueByMonth[index],
         isActive: revenueByMonth[index] > 0
       }));
-      
+
       setMonthlyData(chartData);
     } catch (err) {
       console.error("Booking error", err);
@@ -173,7 +209,6 @@ const AdminIndex = () => {
           </Col>
         </Row>
 
-   
         <Card className="mb-6" title="Revenue Trend (Monthly)">
           <div className="flex h-80">
             <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
@@ -181,26 +216,22 @@ const AdminIndex = () => {
                 <div key={idx}>${label.toLocaleString()}</div>
               ))}
             </div>
-            
-          
+
             <div className="flex-1 flex flex-col">
-         
               <div className="relative flex-1">
                 <div className="absolute inset-0 flex flex-col justify-between">
                   {[0, 1, 2, 3, 4].map((idx) => (
                     <div key={idx} className="border-t border-gray-300 w-full"></div>
                   ))}
                 </div>
-                
-              
                 <div className="relative h-full flex items-end gap-2">
                   {monthlyData.map((data, idx) => {
                     const barHeight = Math.min((data.revenue / maxYValue) * 100, 100);
                     return (
                       <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end">
-                        <div 
-                          className="w-full bg-gradient-to-t from-[#023e7d] to-[#023e7d]  rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#0466c8] cursor-pointer"
-                          style={{ 
+                        <div
+                          className="w-full bg-gradient-to-t from-[#023e7d] to-[#023e7d] rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#0466c8] cursor-pointer"
+                          style={{
                             height: `${barHeight}%`,
                             minHeight: data.revenue > 0 ? '4px' : '0px'
                           }}
@@ -221,9 +252,9 @@ const AdminIndex = () => {
               </div>
             </div>
           </div>
-          
-          <div className="mt-4 pt-3  text-center text-gray-500 text-sm">
-            <span> Monthly revenue performance (Target: $30,000)</span>
+
+          <div className="mt-4 pt-3 text-center text-gray-500 text-sm">
+            <span>Monthly revenue performance (Target: $30,000)</span>
           </div>
         </Card>
 

@@ -13,5 +13,6 @@ namespace SalonBackend.Models
         public int Duration { get; set; }
         public decimal Price { get; set; }
         public bool IsActive { get; set; }
+        public string SalonName { get; set; } = string.Empty;
     }
 }

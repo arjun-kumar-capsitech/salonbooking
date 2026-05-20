@@ -23,6 +23,13 @@ namespace SalonBackend.Controllers
             return Ok(services);
         }
 
+        [HttpGet("by-salon/{salonName}")]
+        public async Task<IActionResult> GetServicesBySalon(string salonName)
+        {
+            var services = await _adminService.GetBySalonNameAsync(salonName);
+            return Ok(services);
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetServiceById(string id)
         {
@@ -41,7 +48,8 @@ namespace SalonBackend.Controllers
                 ServiceName = dto.ServiceName,
                 Duration = dto.Duration,
                 Price = dto.Price,
-                IsActive = dto.IsActive
+                IsActive = dto.IsActive,
+                SalonName = dto.SalonName 
             };
 
             var created = await _adminService.CreateAsync(service);
@@ -62,6 +70,7 @@ namespace SalonBackend.Controllers
             existing.Duration = dto.Duration;
             existing.Price = dto.Price;
             existing.IsActive = dto.IsActive;
+            existing.SalonName = dto.SalonName; 
 
             var success = await _adminService.UpdateAsync(id, existing);
 
@@ -82,7 +91,6 @@ namespace SalonBackend.Controllers
 
             if (!success)
                 return StatusCode(500, new { message = "Failed to delete service" });
-
             return Ok(new { message = "Service deleted successfully" });
         }
     }

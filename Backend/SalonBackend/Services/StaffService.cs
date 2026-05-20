@@ -7,7 +7,6 @@ namespace SalonBackend.Services
     public class StaffService
     {
         private readonly IMongoCollection<Staff> _staff;
-
         public StaffService(IMongoDatabase database)
         {
             _staff = database.GetCollection<Staff>("Staff");
@@ -20,7 +19,7 @@ namespace SalonBackend.Services
 
         public async Task<Staff?> GetByIdAsync(string id)
         {
-              if (!ObjectId.TryParse(id, out var objectId))
+            if (!ObjectId.TryParse(id, out var objectId))
                 return null;
 
             return await _staff.Find(s => s.Id == id).FirstOrDefaultAsync();

@@ -3,10 +3,11 @@ import { Calendar } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import Deshbord from "../../Components/Ui/Deshbord";
 import { setPermissionsByRole } from "../../Redux/Store/Slice/userContentSlice";
+import { authData,} from "../../Redux/Store/Store";
 
 const EmployeeIndex: React.FC = () => {
   const dispatch = useDispatch();
-  const { user } = useSelector((state: any) => state.auth);
+  const { user } = useSelector((authData));
   useEffect(() => {
     if (user?.role) {
       dispatch(setPermissionsByRole({ role: user.role }));

@@ -3,7 +3,7 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { DataTable, } from '../../Components/Ui/Table';  
+import { DataTable } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 
@@ -17,17 +17,45 @@ const Service = () => {
 
   const API_URL = 'http://localhost:5296/api/AdminServices';
 
+  const token = localStorage.getItem("authToken");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user?.Role || user?.role;
+  const userSalonName = user?.SalonName || user?.salonName;
+
+  const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
+  const isSuperAdmin = userRole === "SuperAdmin";
+  const isCustomer = userRole === "Customer" || userRole === 4;
+
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
   const fetchServices = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL);
-      const normalized = response.data.map((s: any, index: number) => ({
-        key: s.id || index,
-        id: s.id,
-        serviceName: s.serviceName,
-        duration: s.duration,
-        price: s.price,
-        status: s.isActive ? 'active' : 'inactive'
+      const response = await axios.get(API_URL, axiosConfig);
+      let filteredServices = response.data;
+
+      if (isCustomer) {
+        filteredServices = response.data.filter((s: any) => s.isActive === true);
+      } else if (isAdmin) {
+        if (userSalonName) {
+          filteredServices = response.data.filter((s: any) =>
+            (s.SalonName || s.salonName) === userSalonName
+          );
+        }
+      }
+
+      const normalized = filteredServices.map((s: any, index: number) => ({
+        key: s.id || s._id || index,
+        id: s.id || s._id,
+        serviceName: s.serviceName || s.ServiceName,
+        duration: s.duration || s.Duration,
+        price: s.price || s.Price,
+        status: s.isActive ? 'active' : 'inactive',
+        salonName: s.SalonName || s.salonName || 'All'
       }));
 
       setServices(normalized);
@@ -43,25 +71,26 @@ const Service = () => {
     fetchServices();
   }, []);
 
- 
   const handleFormSubmit = async (values: any) => {
     const payload = {
       id: editingService?.id || undefined,
       serviceName: values.serviceName,
       duration: Number(values.duration),
       price: Number(values.price),
-      isActive: values.status === 'active'
+      isActive: values.status === 'active',
+      salonName: userSalonName
     };
 
     try {
       if (editingService) {
         await axios.put(
           `${API_URL}/${editingService.id}`,
-          payload
+          payload,
+          axiosConfig
         );
         message.success('Service updated successfully');
       } else {
-        await axios.post(API_URL, payload);
+        await axios.post(API_URL, payload, axiosConfig);
         message.success('Service added successfully');
       }
 
@@ -76,8 +105,13 @@ const Service = () => {
   };
 
   const handleDelete = async (record: any) => {
+    if (isCustomer) {
+      message.error('You are not authorized to delete services');
+      return;
+    }
+
     try {
-      await axios.delete(`${API_URL}/${record.id}`);
+      await axios.delete(`${API_URL}/${record.id}`, axiosConfig);
       message.success('Service deleted successfully');
       await fetchServices();
     } catch (error) {
@@ -90,30 +124,72 @@ const Service = () => {
     (s.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const columns = [
+    {
+      title: "Service Name",
+      dataIndex: "serviceName",
+      key: "serviceName",
+    },
+    {
+      title: "Duration (mins)",
+      dataIndex: "duration",
+      key: "duration",
+    },
+    {
+      title: "Price",
+      dataIndex: "price",
+      key: "price",
+      render: (price: number) => `$${price}`,
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (status: string) => (
+        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${status === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+          }`}>
+          {status?.toUpperCase()}
+        </span>
+      ),
+    },
+  ];
+
+  if (isAdmin || isSuperAdmin) {
+    columns.splice(1, 0, {
+      title: "Salon Name",
+      dataIndex: "salonName",
+      key: "salonName",
+    });
+  }
+
   return (
-    <>
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Service Management</h1>
-          <p className="text-gray-600">Manage salon services</p>
+          <h1 className="text-2xl font-bold">
+            {isCustomer ? "Available Services" : "Service Management"}
+          </h1>
+          <p className="text-gray-600">
+            {isCustomer ? "Browse our services" : "Manage salon services"}
+          </p>
         </div>
 
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingService(null);
-            form.resetFields();
-            setModalVisible(true);
-          }}
-        >
-          Add Service
-        </Button>
+        {!isCustomer && (
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingService(null);
+              form.resetFields();
+              setModalVisible(true);
+            }}
+          >
+            Add Service
+          </Button>
+        )}
       </div>
 
-      <div>
-         <Card className="mb-6">
+      <Card className="mb-6">
         <Input
           placeholder="Search service"
           prefix={<SearchOutlined />}
@@ -122,67 +198,68 @@ const Service = () => {
           onChange={(e) => setSearchTerm(e.target.value)}
         />
       </Card>
-      </div>
-     
 
       <Card>
-        <p className='p-2'>All Services Data</p>
+        <p className='p-2'>
+          {isCustomer ? "Available Services Data" : "All Services Data"}
+        </p>
         <DataTable
           data={filteredServices}
           tableType="services"
           loading={loading}
-          onEdit={(record) => {
+          onEdit={!isCustomer ? (record) => {
             setEditingService(record);
-            form.setFieldsValue(record);
+            form.setFieldsValue({
+              ...record,
+              status: record.status
+            });
             setModalVisible(true);
-          }}
-          onDelete={handleDelete}
-          showActions={true}
+          } : undefined}
+          onDelete={!isCustomer ? handleDelete : undefined}
+          showActions={!isCustomer}
         />
       </Card>
 
-      <ModalForm
-        form={form}
-        open={modalVisible}
-        onClose={() => {
-          setModalVisible(false);
-          setEditingService(null);
-          form.resetFields();
-        }}
-        title={
-          <div className="flex items-center gap-2">
-            <Scissors size={20} />
-            {editingService ? 'Edit Service' : 'Add Service'}
-          </div>
-        }
-        initialValues={editingService || { status: 'active' }}
-        onSubmit={handleFormSubmit}
-        submitText={editingService ? 'Update Service' : 'Add Service'}
-      >
-        <InputField label="Service Name" name="serviceName" required={true} />
-        <InputField
-          label="Duration (minutes)"
-          name="duration"
-          type="number"
-          required={true}
-        />
-
-        <InputField label="Price" name="price" type="number" required={true} />
-
-        <SelectField
-          label="Status"
-          name="status"
-          required={true}
-          options={[
-            { value: 'active', label: 'Active' },
-            { value: 'inactive', label: 'Inactive' }
-          ]}
-        />
-      </ModalForm>
+      {!isCustomer && (
+        <ModalForm
+          form={form}
+          open={modalVisible}
+          onClose={() => {
+            setModalVisible(false);
+            setEditingService(null);
+            form.resetFields();
+          }}
+          title={
+            <div className="flex items-center gap-2">
+              <Scissors size={20} />
+              {editingService ? 'Edit Service' : 'Add Service'}
+            </div>
+          }
+          initialValues={editingService || { status: 'active' }}
+          onSubmit={handleFormSubmit}
+          submitText={editingService ? 'Update Service' : 'Add Service'}
+        >
+          <InputField label="Service Name" name="serviceName" required={true} />
+          <InputField
+            label="Duration (minutes)"
+            name="duration"
+            type="number"
+            required={true}
+          />
+          <InputField label="Price" name="price" type="number" required={true} />
+          <SelectField
+            label="Status"
+            name="status"
+            required={true}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'inactive' }
+            ]}
+          />
+        </ModalForm>
+      )}
     </div>
-    </>
   );
 };
 
 export default Service;
-  

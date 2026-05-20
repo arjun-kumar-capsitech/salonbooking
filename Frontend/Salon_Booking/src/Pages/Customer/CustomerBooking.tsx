@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Card, Row, Col, message } from "antd";
-import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, } from "@ant-design/icons";
+import { Card, Row, Col, message, Modal, Button } from "antd";
+import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import axios from "axios";
 import dayjs from "dayjs";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
@@ -17,6 +17,8 @@ const CustomerBookings: React.FC = () => {
   const [staff, setStaff] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
 
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -85,14 +87,7 @@ const CustomerBookings: React.FC = () => {
             "DD MMM YYYY - hh:mm A"
           ),
           amount: b.amount,
-          status:
-            statusValue === "completed"
-              ? "completed"
-              : statusValue === "confirmed"
-                ? "confirmed"
-                : statusValue === "cancelled"
-                  ? "cancelled"
-                  : "pending",
+          status: statusValue,
         };
       });
 
@@ -116,6 +111,39 @@ const CustomerBookings: React.FC = () => {
     }
   }, [customers, staff, services]);
 
+  // 🔥 Cancel booking function
+  const handleCancelBooking = async () => {
+    if (!selectedBooking) return;
+    
+    try {
+      await axios.put(
+        `${BOOKING_API}/${selectedBooking.id}`,
+        { status: "cancelled" },
+        axiosConfig
+      );
+      message.success("Booking cancelled successfully");
+      fetchBookings();
+      setCancelModalVisible(false);
+      setSelectedBooking(null);
+    } catch (error) {
+      console.error(error);
+      message.error("Failed to cancel booking");
+    }
+  };
+
+  const showCancelConfirm = (record: any) => {
+    if (record.status === "cancelled") {
+      message.warning("This booking is already cancelled");
+      return;
+    }
+    if (record.status === "completed") {
+      message.warning("Cannot cancel completed booking");
+      return;
+    }
+    setSelectedBooking(record);
+    setCancelModalVisible(true);
+  };
+
   const stats = [
     {
       title: "Total Bookings",
@@ -134,6 +162,12 @@ const CustomerBookings: React.FC = () => {
       value: bookings.filter((b) => b.status === "pending").length,
       icon: <ClockCircleOutlined />,
       color: "#37dfba",
+    },
+    {
+      title: "Cancelled",
+      value: bookings.filter((b) => b.status === "cancelled").length,
+      icon: <CloseCircleOutlined />,
+      color: "#ff4d4f",
     },
     {
       title: "Total Spent",
@@ -175,6 +209,22 @@ const CustomerBookings: React.FC = () => {
         <StatusBadge type="booking" value={status} />
       ),
     },
+    {
+      title: "Action",
+      key: "action",
+      render: (_: any, record: any) => (
+        <Button
+          type="link"
+          danger
+          size="small"
+          onClick={() => showCancelConfirm(record)}
+          disabled={record.status === "cancelled" || record.status === "completed"}
+          icon={<CloseCircleOutlined />}
+        >
+          Cancel
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -207,6 +257,32 @@ const CustomerBookings: React.FC = () => {
           />
         </Card>
       </div>
+
+      <Modal
+        title="Cancel Booking"
+        open={cancelModalVisible}
+        onOk={handleCancelBooking}
+        onCancel={() => {
+          setCancelModalVisible(false);
+          setSelectedBooking(null);
+        }}
+        okText="Yes, Cancel"
+        cancelText="No, Go Back"
+        okButtonProps={{ danger: true }}
+      >
+        <div className="py-4">
+          <p className="text-lg font-semibold mb-2">Are you sure you want to cancel this booking?</p>
+          {selectedBooking && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <p><strong>Salon:</strong> {selectedBooking.salonName}</p>
+              <p><strong>Service:</strong> {selectedBooking.serviceName}</p>
+              <p><strong>Date:</strong> {selectedBooking.appointmentDate}</p>
+              <p><strong>Amount:</strong> ${selectedBooking.amount}</p>
+            </div>
+          )}
+          <p className="text-red-500 text-sm mt-4">This action cannot be undone.</p>
+        </div>
+      </Modal>
     </>
   );
 };

@@ -1,17 +1,17 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-// import { setLogin } from "./Redux/Store/authSlice";
 
 import Login from "./Pages/Login/Login";
 import Register from "./Pages/Login/Register";
 import Allrouts from "./Layout/Allroutes";
 import ProtectedRoute from "./ProtectedRoute";
 import { setLogin } from "./Redux/Store/Slice/authSlice";
+import { authData } from "./Redux/Store/Store";
 
 function App() {
   const dispatch = useDispatch();
-  const { token, user } = useSelector((state: any) => state.auth);
+  const { token, user } = useSelector((authData) );
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");

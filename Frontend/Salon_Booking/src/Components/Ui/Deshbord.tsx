@@ -8,6 +8,7 @@ import logo from "../Imeges/Copilot_20260327_173847.png";
 import { setLogout } from "../../Redux/Store/Slice/authSlice";
 import { resetUserData } from "../../Redux/Store/Slice/userslice";
 import { resetUserContent } from "../../Redux/Store/Slice/userContentSlice";
+import { authData, userData } from "../../Redux/Store/Store";
 
 const { Sider, Content } = Layout;
 
@@ -29,8 +30,8 @@ const Deshbord: React.FC<DeshbordProps> = ({
   const navigate = useNavigate();
   const dispatch = useDispatch();
   
-  const { user: authUser } = useSelector((state: any) => state.auth);
-  const { name, role: userRole } = useSelector((state: any) => state.user);
+  const { user: authUser } = useSelector((authData));
+  const { name, role: userRole } = useSelector((userData));
   
   const [collapsed] = React.useState(false);
 

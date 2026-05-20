@@ -1,3 +1,4 @@
+// Controllers/StaffController.cs
 using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
 using SalonBackend.Services;
@@ -7,7 +8,7 @@ namespace SalonBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class StaffController :ControllerBase
+    public class StaffController : ControllerBase
     {
         private readonly StaffService _staffService;
 
@@ -28,7 +29,6 @@ namespace SalonBackend.Controllers
         {
             var staff = await _staffService.GetByIdAsync(id);
             if (staff == null) return NotFound();
-
             return Ok(staff);
         }
 
@@ -42,11 +42,11 @@ namespace SalonBackend.Controllers
                 Password = dto.Password,
                 Role = dto.Role,
                 IsActive = dto.IsActive,
-                JoinedDate = dto.JoinedDate
+                JoinedDate = dto.JoinedDate,
+                SalonName = dto.SalonName 
             };
 
             var created = await _staffService.CreateAsync(staff);
-
             return CreatedAtAction(nameof(GetStaffById), new { id = created.Id }, created);
         }
 
@@ -62,6 +62,7 @@ namespace SalonBackend.Controllers
             existing.Role = dto.Role;
             existing.IsActive = dto.IsActive;
             existing.JoinedDate = dto.JoinedDate;
+            // SalonName update mat karo
 
             var success = await _staffService.UpdateAsync(id, existing);
             if (!success) return StatusCode(500, "Failed to update");

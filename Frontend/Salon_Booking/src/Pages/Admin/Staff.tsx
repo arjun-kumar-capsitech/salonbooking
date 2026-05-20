@@ -1,4 +1,4 @@
-import { Card, Button, Input, Select, Form } from 'antd';
+import { Card, Button, Input, Select, Form, message } from 'antd';
 import { PlusOutlined, SearchOutlined, MailOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -22,22 +22,52 @@ const Staff = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [emailError, setEmailError] = useState('');
+  const token = localStorage.getItem("authToken");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user?.Role || user?.role;
+  const userSalonName = user?.SalonName || user?.salonName;
+
+  const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
+  const isSuperAdmin = userRole === "SuperAdmin";
+  const isCustomer = userRole === "Customer" || userRole === 4;
+
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
 
   const fetchStaff = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(STAFF_API);
-      const normalized = response.data.map((s: any, index: number) => ({
-        key: s.id || index,
-        id: s.id,
+      const response = await axios.get(STAFF_API, axiosConfig);
+      let filteredStaff = response.data;
+
+      if (isCustomer) {
+        filteredStaff = [];
+      } else if (isAdmin) {
+        if (userSalonName) {
+          filteredStaff = response.data.filter((s: any) =>
+            (s.SalonName || s.salonName) === userSalonName
+          );
+        }
+      }
+      const normalized = filteredStaff.map((s: any, index: number) => ({
+        key: s.id || s._id || index,
+        id: s.id || s._id,
         Password: s.password,
-        name: s.name,
+        name: s.FullName || s.fullName || s.name,
         email: s.email,
-        role: s.role,
+        role: s.Role || s.role,
         status: s.isActive ? 'active' : 'inactive',
-        joined: s.joinedDate || ''
+        joined: s.CreatedAt || s.createdAt || s.joinedDate || new Date().toISOString(),
+        salonName: s.SalonName || s.salonName || 'Unknown'
       }));
+
       setStaff(normalized);
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+      message.error('Failed to load staff');
     } finally {
       setLoading(false);
     }
@@ -64,7 +94,7 @@ const Staff = () => {
     {
       title: 'Joined Date',
       dataIndex: 'joined',
-      render: (date: any) => dayjs(date).format("DD MMM YYYY hh:mm A")
+      render: (date: any) => date ? dayjs(date).format("DD MMM YYYY hh:mm A") : 'N/A'
     },
     {
       title: 'Status',
@@ -72,6 +102,14 @@ const Staff = () => {
       render: (status: string) => <StatusBadge type="user" value={status} />
     }
   ];
+
+  if (isAdmin || isSuperAdmin) {
+    columns.splice(1, 0, {
+      title: 'Salon Name',
+      dataIndex: 'salonName',
+      render: (text: string) => <span>{text}</span>
+    });
+  }
 
   const handleFormSubmit = async (values: any) => {
     setEmailError('');
@@ -82,21 +120,22 @@ const Staff = () => {
       email: values.email,
       role: values.role,
       isActive: values.status === 'active',
-      joinedDate: new Date().toISOString()
+      joinedDate: new Date().toISOString(),
+      salonName: userSalonName
     };
 
     try {
       if (editingStaff) {
-        await axios.put(`${STAFF_API}/${editingStaff.id}`, payload);
+        await axios.put(`${STAFF_API}/${editingStaff.id}`, payload, axiosConfig);
+        message.success('Staff updated successfully');
       } else {
-        const staffResponse = await axios.post(STAFF_API, payload);
+        const staffResponse = await axios.post(STAFF_API, payload, axiosConfig);
+        message.success('Staff added successfully');
 
         try {
-          await axios.post(USER_API, { StaffId: staffResponse.data.id });
+          await axios.post(USER_API, { StaffId: staffResponse.data.id }, axiosConfig);
         } catch (userError: any) {
-
           const msg = userError?.response?.data?.message || '';
-
           if (
             msg.toLowerCase().includes('exist') ||
             msg.toLowerCase().includes('already') ||
@@ -106,8 +145,7 @@ const Staff = () => {
           } else {
             setEmailError(msg || 'Something went wrong');
           }
-
-          await axios.delete(`${STAFF_API}/${staffResponse.data.id}`);
+          await axios.delete(`${STAFF_API}/${staffResponse.data.id}`, axiosConfig);
           return;
         }
       }
@@ -118,7 +156,6 @@ const Staff = () => {
 
     } catch (err: any) {
       const msg = err?.response?.data?.message || '';
-
       if (
         msg.toLowerCase().includes('exist') ||
         msg.toLowerCase().includes('already') ||
@@ -132,9 +169,20 @@ const Staff = () => {
   };
 
   const handleDelete = async (record: any) => {
+    if (isCustomer) {
+      message.error('You are not authorized to delete staff');
+      return;
+    }
+
     if (!record.id) return;
-    await axios.delete(`${STAFF_API}/${record.id}`);
-    await fetchStaff();
+    try {
+      await axios.delete(`${STAFF_API}/${record.id}`, axiosConfig);
+      message.success('Staff deleted successfully');
+      await fetchStaff();
+    } catch (error) {
+      console.error('Error deleting staff:', error);
+      message.error('Failed to delete staff');
+    }
   };
 
   const filteredStaff = staff.filter((s) => {
@@ -148,16 +196,23 @@ const Staff = () => {
       <div>
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold">Staff Management</h1>
-            <p className="text-gray-600">Manage salon staff</p>
+            <h1 className="text-2xl font-bold">
+              {isCustomer ? "Our Staff" : "Staff Management"}
+            </h1>
+            <p className="text-gray-600">
+              {isCustomer ? "Meet our professional staff" : "Manage salon staff"}
+            </p>
           </div>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => { setEditingStaff(null); setModalVisible(true); }}
-          >
-            Add Staff
-          </Button>
+
+          {!isCustomer && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => { setEditingStaff(null); form.resetFields(); setEmailError(''); setModalVisible(true); }}
+            >
+              Add Staff
+            </Button>
+          )}
         </div>
 
         <Card className="mb-6">
@@ -182,71 +237,79 @@ const Staff = () => {
         </Card>
 
         <Card className="mt-4">
-          <p className='p-2'>All Staff Data</p>
+          <p className='p-2'>
+            {isCustomer ? "Our Staff Data" : "All Staff Data"}
+          </p>
           <DataTable
             data={filteredStaff}
             columns={columns}
             loading={loading}
-            onEdit={(record) => { setEditingStaff(record); setModalVisible(true); }}
-            onDelete={handleDelete}
-            showActions={true}
+            onEdit={!isCustomer ? (record) => {
+              setEditingStaff(record);
+              form.setFieldsValue({
+                ...record,
+                Password: '',
+                status: record.status
+              });
+              setModalVisible(true);
+            } : undefined}
+            onDelete={!isCustomer ? handleDelete : undefined}
+            showActions={!isCustomer}
             rowKey="key"
           />
         </Card>
 
-        <ModalForm
-          open={modalVisible}
-          onClose={() => {
-            setModalVisible(false);
-            setEditingStaff(null);
-            form.resetFields();
-            setEmailError('');
-          }}
-          title={<div className="flex items-center gap-2"><Scissors size={20} />{editingStaff ? 'Edit Staff' : 'Add Staff'}</div>}
-          initialValues={editingStaff || {}}
-          onSubmit={handleFormSubmit}
-          submitText={editingStaff ? 'Update Staff' : 'Add Staff'}
-        >
-          {emailError && (
-            <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-sm">
-              {emailError}
-            </div>
-          )}
+        {!isCustomer && (
+          <ModalForm
+            open={modalVisible}
+            onClose={() => {
+              setModalVisible(false);
+              setEditingStaff(null);
+              form.resetFields();
+              setEmailError('');
+            }}
+            title={<div className="flex items-center gap-2"><Scissors size={20} />{editingStaff ? 'Edit Staff' : 'Add Staff'}</div>}
+            initialValues={editingStaff || {}}
+            onSubmit={handleFormSubmit}
+            submitText={editingStaff ? 'Update Staff' : 'Add Staff'}
+          >
+            {emailError && (
+              <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-sm">
+                {emailError}
+              </div>
+            )}
 
-          <InputField label="Full Name" name="name" required />
-
-          <InputField
-            label="Email"
-            name="email"
-            type="email"
-            prefix={<MailOutlined />}
-            required
-          />
-
-          <InputField
-            label="Password"
-            name="Password"
-            type="password"
-            required
-          />
-
-          <SelectField
-            label="Role"
-            name="role"
-            required
-            options={[{ value: 'Employee', label: 'Employee' }]}
-          />
-
-          <SelectField
-            label="Status"
-            name="status"
-            required
-            options={[
-              { value: 'active', label: 'Active' },
-              { value: 'inactive', label: 'Inactive' }
-            ]}
-          />
-        </ModalForm>
+            <InputField label="Full Name" name="name" required />
+            <InputField
+              label="Email"
+              name="email"
+              type="email"
+              prefix={<MailOutlined />}
+              required
+            />
+            <InputField
+              label="Password"
+              name="Password"
+              type="password"
+              required={!editingStaff}
+            />
+            <SelectField
+              label="Role"
+              name="role"
+              required
+              options={[{ value: 'Employee', label: 'Employee' }]}
+            />
+            <SelectField
+              label="Status"
+              name="status"
+              required
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' }
+              ]}
+            />
+          </ModalForm>
+        )}
       </div>
     </>
   );

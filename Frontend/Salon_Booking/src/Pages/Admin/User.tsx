@@ -20,16 +20,68 @@ const User = () => {
   const [searchText, setSearchText] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+
   const API_URL = "http://localhost:5296/api/User";
+  const STAFF_API = "http://localhost:5296/api/Staff";
+
+  const token = localStorage.getItem("authToken");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const userRole = user?.Role || user?.role;
+  const userSalonName = user?.SalonName || user?.salonName;
+
+  const isAdmin = userRole === "Admin" || userRole === "admin" || userRole === 1 || userRole === 2;
+  const isSuperAdmin = userRole === "SuperAdmin";
+  const isCustomer = userRole === "Customer" || userRole === 4;
+
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const { data } = await axios.get(API_URL);
-      const filtered = data.filter((u: any) => u.role === 3 || u.role === 4);
+      const [staffRes, usersRes] = await Promise.all([
+        axios.get(STAFF_API, axiosConfig),
+        axios.get(API_URL, axiosConfig)
+      ]);
+      
+      const staffList = staffRes.data || [];
+      const allUsers = usersRes.data || [];
+      
+      let filtered = allUsers.filter((u: any) => u.role === 3 || u.role === 4);
+      
+      if (isCustomer) {
+        filtered = [];
+      } else if (isAdmin && !isSuperAdmin) {
+        if (userSalonName) {
+          const employeeEmailsInSalon = staffList
+            .filter((s: any) => {
+              const staffSalon = (s.SalonName || s.salonName || "").toString().trim();
+              const adminSalon = userSalonName.toString().trim();
+              return staffSalon.toLowerCase() === adminSalon.toLowerCase();
+            })
+            .map((s: any) => (s.Email || s.email || "").toLowerCase());
+          
+          filtered = filtered.filter((u: any) => {
+            if (u.role === 4) {
+              return true;
+            } else if (u.role === 3) {
+              const userEmail = (u.email || "").toLowerCase();
+              return employeeEmailsInSalon.includes(userEmail);
+            }
+            return false;
+          });
+        } else {
+          filtered = filtered.filter((u: any) => u.role === 4);
+        }
+      }
+      
       setUsers(filtered);
       setFilteredUsers(filtered);
-    } catch {
+    } catch (error) {
+      console.error(error);
       message.error("Failed to load users");
     } finally {
       setLoading(false);
@@ -72,39 +124,41 @@ const User = () => {
 
   const handleFormSubmit = async (values: any) => {
     try {
-      const payload = {
-        fullName: values.fullName,
-        email: values.email,
-        role: Number(values.role),
-        isActive: values.isActive === "true"
-      };
-
       if (editingUser) {
-        await axios.put(`${API_URL}/${editingUser.id}`, payload);
+        const payload = {
+          fullName: values.fullName,
+          email: values.email,
+          role: Number(values.role),
+          isActive: values.isActive === "true"
+        };
+        await axios.put(`${API_URL}/${editingUser.id}`, payload, axiosConfig);
         message.success("User updated successfully");
       } else {
         const newPayload = {
           fullName: values.fullName,
           email: values.email,
           phoneNumber: values.phoneNumber || "",
-          password: ""
+          password: values.password || "123456",
+          role: Number(values.role),
+          isActive: true
         };
-        await axios.post(`${API_URL}/register/customer`, newPayload);
-        message.success("Customer registered successfully");
+        await axios.post(`${API_URL}/register`, newPayload, axiosConfig);
+        message.success("User registered successfully");
       }
 
       setModalVisible(false);
       setEditingUser(null);
       form.resetFields();
       fetchUsers();
-    } catch {
+    } catch (err) {
+      console.error(err);
       message.error("Failed to save user");
     }
   };
 
   const handleDelete = async (record: any) => {
     try {
-      await axios.delete(`${API_URL}/${record.id}`);
+      await axios.delete(`${API_URL}/${record.id}`, axiosConfig);
       message.success("User deleted successfully");
       fetchUsers();
     } catch {
@@ -127,6 +181,14 @@ const User = () => {
       key: 'email',
       render: (email: string) => (
         <div className="text-gray-500 text-sm">{email || "-"}</div>
+      )
+    },
+    {
+      title: 'Role',
+      dataIndex: 'role',
+      key: 'role',
+      render: (role: number) => (
+        <span>{role === 3 ? "Employee" : "Customer"}</span>
       )
     },
     {
@@ -158,6 +220,7 @@ const User = () => {
           icon={<PlusOutlined />}
           onClick={() => {
             setEditingUser(null);
+            form.resetFields();
             setModalVisible(true);
           }}
         >
@@ -205,6 +268,12 @@ const User = () => {
           loading={loading}
           onEdit={(record: any) => {
             setEditingUser(record);
+            form.setFieldsValue({
+              fullName: record.fullName,
+              email: record.email,
+              role: record.role,
+              isActive: String(record.isActive)
+            });
             setModalVisible(true);
           }}
           onDelete={handleDelete}
@@ -228,7 +297,7 @@ const User = () => {
         initialValues={
           editingUser
             ? { ...editingUser, isActive: String(editingUser.isActive) }
-            : {}
+            : { role: 4, isActive: "true" }
         }
         onSubmit={handleFormSubmit}
         loading={false}
@@ -248,6 +317,16 @@ const User = () => {
           type="email"
           prefix={<MailOutlined />}
         />
+
+        {!editingUser && (
+          <InputField
+            label="Password"
+            name="password"
+            placeholder="Enter password"
+            type="password"
+            required={true}
+          />
+        )}
 
         <SelectField
           label="Role"

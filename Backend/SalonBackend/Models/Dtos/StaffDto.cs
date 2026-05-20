@@ -8,6 +8,7 @@ namespace SalonBackend.Models.Dtos
         public string Role { get; set; } = string.Empty;
         public bool IsActive { get; set; }
         public DateTime JoinedDate { get; set; }
+        public string SalonName { get; set; } = string.Empty;
 
     }
 }

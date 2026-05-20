@@ -14,7 +14,7 @@
             [BsonRequired]
             public string Name
             {
-                get => _name;
+                get => _name;       
                 set => _name = string.IsNullOrWhiteSpace(value)
                     ? string.Empty
                     : Regex.Replace(value, @"\s+", " ").Trim();
@@ -51,5 +51,6 @@
             public bool IsActive { get; set; } = true;
 
         public DateTime JoinedDate { get; set; } = DateTime.UtcNow;
+        public string SalonName { get; set; } = string.Empty;
         }
     }

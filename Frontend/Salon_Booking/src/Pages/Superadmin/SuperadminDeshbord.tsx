@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Typography, Card, Button, Row, Col } from 'antd'
-import { ShopOutlined, TeamOutlined, DollarOutlined } from '@ant-design/icons'
+import { ShopOutlined, TeamOutlined, DollarOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { DataTable } from '../../Components/Ui/Table'
@@ -30,49 +30,59 @@ const SuperAdminDeshbord = () => {
     try {
       const res = await axios.get(API_URL, axiosConfig)
       const allUsers = res.data
-      setUsers(allUsers)
       
+      const customers = allUsers.filter((u: any) => u.role === 4)
       const admins = allUsers.filter((u: any) => u.role === 2)
+      
+      setUsers(customers)
+
       const companyData = admins.map((u: any, index: number) => ({
-        id: u.id || index,
-        salonName: u.salonName,
-        owner: u.fullName,
-        email: u.email,
-        phone: u.phoneNumber,
-        adminId: u.id
+        id: u.id || u._id || index,
+        salonName: u.SalonName || u.salonName || "N/A",
+        owner: u.FullName || u.fullName || "N/A",
+        email: u.Email || u.email || "N/A",
+        phone: u.PhoneNumber || u.phoneNumber || "N/A",
+        adminId: u.id || u._id,
+        status: u.isActive ? 'active' : 'inactive',
+        createdAt: u.CreatedAt || u.createdAt
       }))
       setCompanies(companyData)
 
       const bookingsRes = await axios.get(BOOKING_API, axiosConfig)
       const allBookings = bookingsRes.data
-      
-      let revenue = 0
+
+      let totalRevenueAmount = 0
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
       const revenueByMonth = new Array(12).fill(0)
-      
+
       allBookings.forEach((booking: any) => {
         let amount = 0
-        if (booking.amount) amount = parseFloat(booking.amount)
+        if (booking.Amount) amount = parseFloat(booking.Amount)
+        else if (booking.amount) amount = parseFloat(booking.amount)
         else if (booking.totalAmount) amount = parseFloat(booking.totalAmount)
         else if (booking.price) amount = parseFloat(booking.price)
-        else if (booking.Amount) amount = parseFloat(booking.Amount)
         
-        if (booking.status === 'completed' || booking.status === 'confirmed' || booking.status === 'pending') {
-          revenue += isNaN(amount) ? 0 : amount
+        amount = isNaN(amount) ? 0 : amount
+
+        const status = (booking.Status || booking.status || "").toLowerCase()
+        
+        if (status === 'completed' || status === 'confirmed') {
+          totalRevenueAmount += amount
+          
+          const bookingDate = booking.AppointmentDate || booking.appointmentDate || booking.CreatedAt || booking.createdAt || new Date()
+          const month = new Date(bookingDate).getMonth()
+          revenueByMonth[month] += amount
         }
-        
-        const bookingDate = booking.appointmentDate || booking.createdAt || new Date()
-        const month = new Date(bookingDate).getMonth()
-        revenueByMonth[month] += isNaN(amount) ? 0 : amount
       })
-      
-      setTotalRevenue(revenue)
-      
+
+      setTotalRevenue(totalRevenueAmount)
+
       const chartData = months.map((month, index) => ({
         month,
-        revenue: revenueByMonth[index]
+        revenue: revenueByMonth[index],
+        isActive: revenueByMonth[index] > 0
       }))
-      
+
       setMonthlyData(chartData)
     } catch (error) {
       console.log(error)
@@ -80,23 +90,23 @@ const SuperAdminDeshbord = () => {
       setLoading(false)
     }
   }
-  
+
   useEffect(() => {
     loadData()
   }, [])
 
-  const maxYValue = 100000
-  const yAxisLabels = [100000, 75000, 50000, 25000, 0]
+  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 1000)
+  const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0]
 
   const stats = [
     {
-      title: 'Companies',
+      title: 'Total Companies',
       value: companies.length,
       icon: <ShopOutlined />,
       color: '#000000'
     },
     {
-      title: 'Total Users',
+      title: 'Total Customers',
       value: users.length,
       icon: <TeamOutlined />,
       color: '#0400f7'
@@ -121,7 +131,7 @@ const SuperAdminDeshbord = () => {
           </div>
           <div>
             <div className="font-medium">{text}</div>
-            <div className="text-sm text-gray-500">{record.owner}</div>
+            <div className="text-sm text-gray-500">Owner: {record.owner}</div>
           </div>
         </div>
       )
@@ -129,119 +139,134 @@ const SuperAdminDeshbord = () => {
     {
       title: 'Email',
       dataIndex: 'email',
-      key: 'email'
+      key: 'email',
+      render: (text: string) => (
+        <div className="flex items-center gap-2">
+          <MailOutlined className="text-gray-400" />
+          <span>{text}</span>
+        </div>
+      )
     },
     {
       title: 'Phone',
       dataIndex: 'phone',
-      key: 'phone'
+      key: 'phone',
+      render: (text: string) => (
+        <div className="flex items-center gap-2">
+          <PhoneOutlined className="text-gray-400" />
+          <span>{text || "N/A"}</span>
+        </div>
+      )
     }
   ]
 
   return (
-    <>
-      <div className="p-6">
-        <div className="mb-6">
-          <Title level={3}>Super Admin Dashboard</Title>
-          <Text type="secondary">System overview</Text>
-        </div>
-        
-        <Row gutter={[24, 24]} className="mb-8">
-          {stats.map((stat, index) => (
-            <Col xs={24} sm={8} md={8} key={index}>
-              <StatCard
-                title={stat.title}
-                value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-              />
-            </Col>
-          ))}
-        </Row>
+    <div className="p-6">
+      <div className="mb-6">
+        <Title level={3} className="!mb-2">Super Admin Dashboard</Title>
+        <Text type="secondary">System overview and analytics</Text>
+      </div>
 
-       
-        <Card className="mb-8 shadow-sm" title="Revenue Trend (Monthly)">
-          <div className="flex h-80">
-    
-            <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
-              {yAxisLabels.map((label, idx) => (
-                <div key={idx}>${label.toLocaleString()}</div>
-              ))}
-            </div>
-            
-            <div className="flex-1 flex flex-col">
-              <div className="relative flex-1">
-                <div className="absolute inset-0 flex flex-col justify-between">
-                  {[0, 1, 2, 3, 4].map((idx) => (
-                    <div key={idx} className="border-t border-gray-200 w-full"></div>
-                  ))}
-                </div>
-                
-              
-                <div className="relative h-full flex items-end gap-2">
-                  {monthlyData.map((data, idx) => {
-                    const barHeight = Math.min((data.revenue / maxYValue) * 100, 100)
-                    return (
-                      <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end">
-                        <div 
-                          className="w-full bg-gradient-to-t from-[#023e7d] to-[#023e7d]  rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#0466c8] cursor-pointer"
-                          style={{ 
-                            height: `${barHeight}%`,
-                            minHeight: data.revenue > 0 ? '4px' : '0px'
-                          }}
-                        >
-                          <div className="text-center -mt-6 opacity-0 hover:opacity-100 transition-opacity">
-                            <span className="bg-gray-800 text-white text-xs rounded px-2 py-1">
-                              ${data.revenue.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-center mt-2">
-                          <div className="text-xs font-medium text-gray-700">{data.month}</div>
+      <Row gutter={[24, 24]} className="mb-8">
+        {stats.map((stat, index) => (
+          <Col xs={24} sm={12} md={8} key={index}>
+            <StatCard
+              title={stat.title}
+              value={stat.value}
+              icon={stat.icon}
+              color={stat.color}
+            />
+          </Col>
+        ))}
+      </Row>
+
+      <Card className="mb-8 shadow-sm border border-gray-100" title="Revenue Trend (Monthly)">
+        <div className="flex h-80">
+          <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
+            {yAxisLabels.map((label, idx) => (
+              <div key={idx}>${Math.round(label).toLocaleString()}</div>
+            ))}
+          </div>
+
+          <div className="flex-1 flex flex-col">
+            <div className="relative flex-1">
+              <div className="absolute inset-0 flex flex-col justify-between">
+                {[0, 1, 2, 3, 4].map((idx) => (
+                  <div key={idx} className="border-t border-gray-200 w-full"></div>
+                ))}
+              </div>
+
+              <div className="relative h-full flex items-end gap-2">
+                {monthlyData.map((data, idx) => {
+                  const barHeight = Math.min((data.revenue / maxYValue) * 100, 100)
+                  return (
+                    <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
+                      <div
+                        className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 cursor-pointer"
+                        style={{
+                          height: `${barHeight}%`,
+                          minHeight: data.revenue > 0 ? '4px' : '0px'
+                        }}
+                      >
+                        <div className="text-center -mt-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="bg-gray-800 text-white text-xs rounded px-2 py-1">
+                            ${data.revenue.toLocaleString()}
+                          </span>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
+                      <div className="text-center mt-2">
+                        <div className="text-xs font-medium text-gray-700">{data.month}</div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
-          
-          <div className="mt-4 pt-3 border-t text-center text-gray-500 text-sm">
-            <span>Yearly revenue performance</span>
-          </div>
-        </Card>
-
-        <div className="mt-8">
-          <Card
-            title={
-              <div className="flex items-center">
-                <ShopOutlined className="mr-2 text-blue-500" />
-                Companies Registered
-              </div>
-            }
-            extra={
-              <Button
-                type="primary"
-                size="small"
-                onClick={() => navigate('/Super-admin/compani')}
-              >
-                View Companies
-              </Button>
-            }
-            className="shadow-sm"
-          >
-            <DataTable
-              data={companies}
-              columns={companyColumns}
-              loading={loading}
-              rowKey="id"
-              showActions={false}
-            />
-          </Card>
         </div>
+
+        <div className="mt-4 pt-3 border-t text-center text-gray-500 text-sm">
+          <span>Monthly revenue performance (Completed & Confirmed bookings only)</span>
+        </div>
+      </Card>
+
+      <div className="mt-8">
+        <Card
+          title={
+            <div className="flex items-center">
+              <ShopOutlined className="mr-2 text-blue-500" />
+              <span>Registered Companies</span>
+            </div>
+          }
+          extra={
+            <Button
+              type="primary"
+              size="small"
+              onClick={() => navigate('/Super-admin/compani')}
+            >
+              View All
+            </Button>
+          }
+          className="shadow-sm border border-gray-100"
+        >
+          <DataTable
+            data={companies.slice(0, 5)}
+            columns={companyColumns}
+            loading={loading}
+            rowKey="id"
+            showActions={false}
+          />
+          {companies.length > 5 && (
+            <div className="text-center mt-4">
+              <Button type="link" onClick={() => navigate('/Super-admin/compani')}>
+                + {companies.length - 5} more companies
+              </Button>
+            </div>
+          )}
+        </Card>
       </div>
-    </>
+    </div>
   )
 }
+
 export default SuperAdminDeshbord
