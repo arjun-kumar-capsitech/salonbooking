@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
 import { getSalonBookingAPI } from "../../api/generated";
@@ -64,7 +64,6 @@ function Login() {
         return;
       }
 
-  
       const result = data.result as { user: any; token: string };
       
       if (!result?.user) {
@@ -76,7 +75,6 @@ function Login() {
       const user = result.user;
       const token = result.token;
 
-    
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
@@ -84,11 +82,11 @@ function Login() {
         return;
       }
 
-      localStorage.setItem("authToken", token);
-      localStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("userRole", user.role?.toString());
-
       dispatch(setLogin({ user, token }));
+
+      const redirectPath = localStorage.getItem("redirectAfterLogin");
+      
+      localStorage.removeItem("redirectAfterLogin");
 
       const roleRoutes: Record<number, string> = {
         1: "/super-admin/deshboard",
@@ -96,7 +94,12 @@ function Login() {
         3: "/employee/deshbord",
         4: "/customer/booking",
       };
-      navigate(roleRoutes[user.role] || "/");
+
+      if (redirectPath && redirectPath !== "/" && redirectPath !== "/login") {
+        navigate(redirectPath);
+      } else {
+        navigate(roleRoutes[user.role] || "/");
+      }
 
     } catch (err) {
       console.error("Login error:", err);

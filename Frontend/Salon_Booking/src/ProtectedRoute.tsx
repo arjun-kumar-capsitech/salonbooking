@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { useSelector } from "react-redux";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { authData } from "./Redux/Store/Store";
 
 interface Props {
@@ -9,15 +9,28 @@ interface Props {
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: Props) => {
-  const { token, user } = useSelector((authData));
+  const { isAuth, token, user } = useSelector(authData);
+  const location = useLocation();
 
-  if (!token) return <Navigate to="/" replace />;
+  if (!isAuth || !token) {
+    localStorage.setItem("redirectAfterLogin", location.pathname + location.search);
+    return <Navigate to="/" replace />;
+  }
 
   if (allowedRoles && allowedRoles.length > 0) {
-    if (!user) return <Navigate to="/" replace />;
+    if (!user || !user.role) {
+      localStorage.setItem("redirectAfterLogin", location.pathname + location.search);
+      return <Navigate to="/" replace />;
+    }
 
     if (!allowedRoles.includes(user.role)) {
-      return <Navigate to="/" replace />;
+      const roleRoutes: Record<number, string> = {
+        1: "/super-admin/deshboard",
+        2: "/admin/dashboard",
+        3: "/employee/deshbord",
+        4: "/customer/booking",
+      };
+      return <Navigate to={roleRoutes[user.role] || "/"} replace />;
     }
   }
 

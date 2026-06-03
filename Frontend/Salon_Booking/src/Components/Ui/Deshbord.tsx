@@ -1,8 +1,8 @@
-import React, {} from "react";
+import React, { useEffect } from "react";
 import { Button, Layout, Menu, Avatar } from "antd";
 import type { MenuProps } from "antd";
 import { LogOut } from "lucide-react";
-import { useNavigate, Outlet } from "react-router-dom";
+import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import logo from "../Imeges/Copilot_20260327_173847.png";
 import { setLogout } from "../../Redux/Store/Slice/authSlice";
@@ -28,12 +28,34 @@ const Deshbord: React.FC<DeshbordProps> = ({
   appName = "Salon Manager",
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
   
-  const { user: authUser } = useSelector((authData));
-  const { name, role: userRole } = useSelector((userData));
+  const { user: authUser } = useSelector(authData);
+  const { name, role: userRole } = useSelector(userData);
   
   const [collapsed] = React.useState(false);
+
+  useEffect(() => {
+    const currentPath = location.pathname;
+    if (currentPath && 
+        currentPath !== '/admin' && 
+        currentPath !== '/super-admin' &&
+        currentPath !== '/employee' &&
+        currentPath !== '/customer') {
+      localStorage.setItem('lastVisitedPath', currentPath);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const lastPath = localStorage.getItem('lastVisitedPath');
+    const currentPath = location.pathname;
+    
+    if ((currentPath === '/admin' || currentPath === '/super-admin' || 
+         currentPath === '/employee' || currentPath === '/customer') && lastPath) {
+      navigate(lastPath);
+    }
+  }, []);
 
   const displayName = name || authUser?.fullName || authUser?.name || "Guest";
   const displayRole = userRole || authUser?.role;
@@ -59,8 +81,9 @@ const Deshbord: React.FC<DeshbordProps> = ({
     localStorage.removeItem("authToken");
     localStorage.removeItem("user");
     localStorage.removeItem("userRole");
+    localStorage.removeItem("lastVisitedPath");
+    localStorage.removeItem("redirectAfterLogin");
     
- 
     dispatch(setLogout());
     dispatch(resetUserData());
     dispatch(resetUserContent());
@@ -73,6 +96,12 @@ const Deshbord: React.FC<DeshbordProps> = ({
     icon: item.icon,
     label: item.label,
   }));
+
+  const getSelectedKey = () => {
+    const currentPath = location.pathname;
+    const matchedItem = menuItems.find(item => currentPath.includes(item.key));
+    return matchedItem?.key || menuItems[0]?.key || "";
+  };
 
   return (
     <Layout className="h-screen overflow-hidden">
@@ -94,7 +123,7 @@ const Deshbord: React.FC<DeshbordProps> = ({
         <Menu
           theme="dark"
           mode="inline"
-          defaultSelectedKeys={[menuItems[0]?.key || ""]}
+          selectedKeys={[getSelectedKey()]}
           items={menuItemsFormatted}
           onClick={(e) => navigate(e.key)}
           className="border-r-0 overflow-y-auto"

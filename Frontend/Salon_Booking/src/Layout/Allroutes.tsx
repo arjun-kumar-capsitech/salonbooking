@@ -28,69 +28,64 @@ import NotFound from "../Components/NotFound ";
 
 const Allrouts = () => {
   return (
-    <>
-      <Routes>
+    <Routes>
+      <Route
+        path="/admin/*"
+        element={
+          <ProtectedRoute allowedRoles={[2]}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="dashboard" element={<AdminIndex />} />
+        <Route path="booking" element={<Booking />} />
+        <Route path="services" element={<Services />} />
+        <Route path="staff" element={<StaffManagement />} />
+        <Route path="setting" element={<Setting />} />
+        <Route path="user" element={<User />} />
+      </Route>
 
-        <Route
-          path="/admin/*"
-          element={
-            <ProtectedRoute allowedRoles={[2]}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        >
+      <Route
+        path="/super-admin/*"
+        element={
+          <ProtectedRoute allowedRoles={[1]}>
+            <SuperAdminIndex />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="deshboard" element={<SuperAdminDeshbord />} />
+        <Route path="compani" element={<Compani />} />
+        <Route path="request" element={<Request />} />
+        <Route path="user" element={<SuperadminUser />} />
+      </Route>
 
-          
-          <Route path="dashboard" element={<AdminIndex />} />
-          <Route path="booking" element={<Booking />} />
-          <Route path="services" element={<Services />} />
-          <Route path="staff" element={<StaffManagement />} />
-          <Route path="setting" element={<Setting />} />
-          <Route path="user" element={<User />} />
-        </Route>
+      <Route
+        path="/employee/*"
+        element={
+          <ProtectedRoute allowedRoles={[3]}>
+            <EmployeeIndex />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="deshbord" element={<EmployeeDeshbord />} />
+        <Route path="service" element={<EmployeeService />} />
+        <Route path="booking" element={<EmployeeBooking />} />
+      </Route>
 
-        <Route
-          path="/super-admin/*"
-          element={
-            <ProtectedRoute allowedRoles={[1]}>
-              <SuperAdminIndex />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="deshboard" element={<SuperAdminDeshbord />} />
-          <Route path="compani" element={<Compani />} />
-          <Route path="request" element={<Request />} />
-          <Route path="user" element={<SuperadminUser />} />
-        </Route>
+      <Route
+        path="/customer/*"
+        element={
+          <ProtectedRoute allowedRoles={[4]}>
+            <CustomerIndex />
+          </ProtectedRoute>
+        }
+      >
+        <Route path="booking" element={<CustomerBookings />} />
+        <Route path="appointment" element={<CustomerAppointment />} />
+      </Route>
 
-        <Route
-          path="/employee/*"
-          element={
-            <ProtectedRoute allowedRoles={[3]}>
-              <EmployeeIndex />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="deshbord" element={<EmployeeDeshbord />} />
-          <Route path="service" element={<EmployeeService />} />
-          <Route path="booking" element={<EmployeeBooking />} />
-        </Route>
-
-        <Route
-          path="/customer/*"
-          element={
-            <ProtectedRoute allowedRoles={[4]}>
-              <CustomerIndex />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="booking" element={<CustomerBookings />} />
-          <Route path="appointment" element={<CustomerAppointment />} />
-        </Route>
-
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </>
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 };
 
