@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { Card, Row, Col, message, Modal, Button } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
-import axios from "axios";
 import dayjs from "dayjs";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import { StatCard } from "../../Components/Ui/Cards";
+import { getSalonBookingAPI } from '../../api/generated';
 
-const BOOKING_API = "http://localhost:5296/api/Booking";
-const USER_API = "http://localhost:5296/api/User";
-const STAFF_API = "http://localhost:5296/api/Staff";
-const SERVICE_API = "http://localhost:5296/api/AdminServices";
+const { getApiBooking, getApiUser, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
 
 const CustomerBookings: React.FC = () => {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -30,10 +27,25 @@ const CustomerBookings: React.FC = () => {
     },
   };
 
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   const fetchCustomers = async () => {
     try {
-      const res = await axios.get(USER_API, axiosConfig);
-      const onlyCustomers = res.data.filter((u: any) => u.role === 4);
+      const res = await getApiUser(axiosConfig);
+      const usersData = extractData(res);
+      const onlyCustomers = usersData.filter((u: any) => u.role === 4);
       setCustomers(onlyCustomers);
     } catch {
       message.error("Failed to load customers");
@@ -42,8 +54,9 @@ const CustomerBookings: React.FC = () => {
 
   const fetchStaff = async () => {
     try {
-      const res = await axios.get(STAFF_API, axiosConfig);
-      setStaff(res.data);
+      const res = await getApiStaff(axiosConfig);
+      const staffData = extractData(res);
+      setStaff(staffData);
     } catch {
       message.error("Failed to load staff");
     }
@@ -51,8 +64,9 @@ const CustomerBookings: React.FC = () => {
 
   const fetchServices = async () => {
     try {
-      const res = await axios.get(SERVICE_API, axiosConfig);
-      setServices(res.data);
+      const res = await getApiAdminServices(axiosConfig);
+      const servicesData = extractData(res);
+      setServices(servicesData);
     } catch {
       message.error("Failed to load services");
     }
@@ -61,32 +75,33 @@ const CustomerBookings: React.FC = () => {
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(BOOKING_API, axiosConfig);
+      const res = await getApiBooking(axiosConfig);
+      const bookingsData = extractData(res);
 
-      const filtered = res.data.filter(
-        (b: any) => String(b.customerId) === String(loggedInUserId)
+      const filtered = bookingsData.filter(
+        (b: any) => String(b.customerId || b.CustomerId) === String(loggedInUserId)
       );
 
       const mappedBookings = filtered.map((b: any, index: number) => {
         const staffMember = staff.find(
-          (s) => String(s.id || s._id) === String(b.staffId)
+          (s) => String(s.id || s._id) === String(b.staffId || b.StaffId)
         );
         const service = services.find(
-          (s) => String(s.id || s._id) === String(b.serviceId)
+          (s) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
         );
 
-        const statusValue = (b.status || "").toLowerCase();
+        const statusValue = (b.status || b.Status || "").toLowerCase();
 
         return {
           key: b.id || b._id || index,
           id: b.id || b._id,
-          salonName: b.salonName || "Unknown",
-          staffName: staffMember?.name || "Unknown",
-          serviceName: service?.serviceName || "Unknown",
-          appointmentDate: dayjs(b.appointmentDate).format(
+          salonName: b.salonName || b.SalonName || "Unknown",
+          staffName: staffMember?.name || staffMember?.Name || "Unknown",
+          serviceName: service?.serviceName || service?.ServiceName || "Unknown",
+          appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format(
             "DD MMM YYYY - hh:mm A"
           ),
-          amount: b.amount,
+          amount: b.amount || b.Amount,
           status: statusValue,
         };
       });
@@ -111,16 +126,11 @@ const CustomerBookings: React.FC = () => {
     }
   }, [customers, staff, services]);
 
-  // 🔥 Cancel booking function
   const handleCancelBooking = async () => {
     if (!selectedBooking) return;
     
     try {
-      await axios.put(
-        `${BOOKING_API}/${selectedBooking.id}`,
-        { status: "cancelled" },
-        axiosConfig
-      );
+      await putApiBookingId(selectedBooking.id, { status: "cancelled" }, axiosConfig);
       message.success("Booking cancelled successfully");
       fetchBookings();
       setCancelModalVisible(false);
@@ -190,7 +200,7 @@ const CustomerBookings: React.FC = () => {
       dataIndex: "serviceName",
     },
     {
-      title: "Date",
+      title: "Date & Time",
       dataIndex: "appointmentDate",
     },
     {

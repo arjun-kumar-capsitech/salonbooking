@@ -10,88 +10,208 @@ namespace SalonBackend.Controllers
     public class AdminServicesController : ControllerBase
     {
         private readonly AdminService _adminService;
-
         public AdminServicesController(AdminService adminService)
         {
             _adminService = adminService;
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAllServices()
+        public async Task<ActionResult<ApiResponse<List<AdminServices>>>> GetAllServices()
         {
-            var services = await _adminService.GetAllAsync();
-            return Ok(services);
-        }
+            try
+            {
+                var services = await _adminService.GetAllAsync();
 
-        [HttpGet("by-salon/{salonName}")]
-        public async Task<IActionResult> GetServicesBySalon(string salonName)
-        {
-            var services = await _adminService.GetBySalonNameAsync(salonName);
-            return Ok(services);
+                return Ok(new ApiResponse<List<AdminServices>>
+                {
+                    Status = true,
+                    Message = "Services retrieved successfully",
+                    Result = services
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<AdminServices>>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetServiceById(string id)
+        public async Task<ActionResult<ApiResponse<AdminServices>>> GetServiceById(string id)
         {
-            var service = await _adminService.GetByIdAsync(id);
-            if (service == null)
-                return NotFound(new { message = "Service not found" });
+            try
+            {
+                var service = await _adminService.GetByIdAsync(id);
 
-            return Ok(service);
+                if (service == null)
+                {
+                    return NotFound(new ApiResponse<AdminServices>
+                    {
+                        Status = false,
+                        Message = "Service not found",
+                        Result = null
+                    });
+                }
+
+                return Ok(new ApiResponse<AdminServices>
+                {
+                    Status = true,
+                    Message = "Service retrieved successfully",
+                    Result = service
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<AdminServices>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
+        }
+
+        [HttpGet("by-salon/{salonName}")]
+        public async Task<ActionResult<ApiResponse<List<AdminServices>>>> GetServicesBySalon(string salonName)
+        {
+            try
+            {
+                var services = await _adminService.GetBySalonNameAsync(salonName);
+
+                return Ok(new ApiResponse<List<AdminServices>>
+                {
+                    Status = true,
+                    Message = $"Services for salon: {salonName}",
+                    Result = services
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<AdminServices>>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateService([FromBody] AdminServiceDto dto)
+        public async Task<ActionResult<ApiResponse<AdminServices>>> CreateService([FromBody] AdminServiceDto dto)
         {
-            var service = new AdminServices
+            try
             {
-                ServiceName = dto.ServiceName,
-                Duration = dto.Duration,
-                Price = dto.Price,
-                IsActive = dto.IsActive,
-                SalonName = dto.SalonName 
-            };
+                var service = new AdminServices
+                {
+                    ServiceName = dto.ServiceName,
+                    Duration = dto.Duration,
+                    Price = dto.Price,
+                    IsActive = dto.IsActive,
+                    SalonName = dto.SalonName
+                };
 
-            var created = await _adminService.CreateAsync(service);
+                var created = await _adminService.CreateAsync(service);
 
-            return CreatedAtAction(nameof(GetServiceById),
-                new { id = created.Id },
-                created);
+                return Ok(new ApiResponse<AdminServices>
+                {
+                    Status = true,
+                    Message = "Service created successfully",
+                    Result = created
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<AdminServices>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateService(string id, [FromBody] AdminServiceDto dto)
+        public async Task<ActionResult<ApiResponse<AdminServices>>> UpdateService(string id, [FromBody] AdminServiceDto dto)
         {
-            var existing = await _adminService.GetByIdAsync(id);
-            if (existing == null)
-                return NotFound(new { message = "Service not found" });
+            try
+            {
+                var existing = await _adminService.GetByIdAsync(id);
 
-            existing.ServiceName = dto.ServiceName;
-            existing.Duration = dto.Duration;
-            existing.Price = dto.Price;
-            existing.IsActive = dto.IsActive;
-            existing.SalonName = dto.SalonName; 
+                if (existing == null)
+                {
+                    return NotFound(new ApiResponse<AdminServices>
+                    {
+                        Status = false,
+                        Message = "Service not found",
+                        Result = null
+                    });
+                }
 
-            var success = await _adminService.UpdateAsync(id, existing);
+                existing.ServiceName = dto.ServiceName;
+                existing.Duration = dto.Duration;
+                existing.Price = dto.Price;
+                existing.IsActive = dto.IsActive;
+                existing.SalonName = dto.SalonName;
 
-            if (!success)
-                return StatusCode(500, new { message = "Failed to update service" });
+                await _adminService.UpdateAsync(id, existing);
 
-            return Ok(existing);
+                return Ok(new ApiResponse<AdminServices>
+                {
+                    Status = true,
+                    Message = "Service updated successfully",
+                    Result = existing
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<AdminServices>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteService(string id)
+        public async Task<ActionResult<ApiResponse<bool>>> DeleteService(string id)
         {
-            var existing = await _adminService.GetByIdAsync(id);
-            if (existing == null)
-                return NotFound(new { message = "Service not found" });
+            try
+            {
+                var existing = await _adminService.GetByIdAsync(id);
 
-            var success = await _adminService.DeleteAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new ApiResponse<bool>
+                    {
+                        Status = false,
+                        Message = "Service not found",
+                        Result = false
+                    });
+                }
 
-            if (!success)
-                return StatusCode(500, new { message = "Failed to delete service" });
-            return Ok(new { message = "Service deleted successfully" });
+                var deleted = await _adminService.DeleteAsync(id);
+
+                return Ok(new ApiResponse<bool>
+                {
+                    Status = true,
+                    Message = "Service deleted successfully",
+                    Result = deleted
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = false
+                });
+            }
         }
     }
 }

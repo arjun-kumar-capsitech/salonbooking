@@ -1,17 +1,14 @@
-import { Card, Input, Form, message } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
-import { Scissors } from "lucide-react";
-import { useEffect, useState } from "react";
-import axios from "axios";
-import dayjs from "dayjs";
-import { DataTable } from "../../Components/Ui/Table";
-import { InputField, SelectField } from "../../Components/Ui/Forms";
-import ModalForm from "../../Components/Ui/Modals";
+import { Card, Input, Form, message } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
+import { Scissors } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
+import { DataTable } from '../../Components/Ui/Table';
+import { SelectField } from '../../Components/Ui/Forms';
+import ModalForm from '../../Components/Ui/Modals';
+import { getSalonBookingAPI } from '../../api/generated';
 
-const BOOKING_API = "http://localhost:5296/api/Booking";
-const USER_API = "http://localhost:5296/api/User";
-const STAFF_API = "http://localhost:5296/api/Staff";
-const SERVICE_API = "http://localhost:5296/api/AdminServices";
+const { getApiBooking,getApiUser, getApiStaff,getApiAdminServices,putApiBookingId,deleteApiBookingId} = getSalonBookingAPI();
 
 interface Booking {
   key: string | number;
@@ -31,64 +28,85 @@ const Bookings = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const loggedInUserId = user?.id || user?._id;
   const userRole = user?.Role || user?.role;
   const userSalonName = user?.SalonName || user?.salonName;
+  
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isCustomer = userRole === "Customer" || userRole === 4;
-  const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
+  
+  const axiosConfig = { 
+    headers: { 
+      Authorization: `Bearer ${token}` 
+    } 
+  };
+
+  const extractData = (response: any) => {
+    if (!response) return [];
+    const data = response.data;
+    if (data?.status === true && data?.result) return data.result;
+    if (data?.result) return data.result;
+    if (Array.isArray(data)) return data;
+    return [];
+  };
 
   const fetchBookings = async () => {
     setLoading(true);
     try {
       const [bookingRes, userRes, staffRes, serviceRes] = await Promise.all([
-        axios.get(BOOKING_API, axiosConfig),
-        axios.get(USER_API, axiosConfig),
-        axios.get(STAFF_API, axiosConfig),
-        axios.get(SERVICE_API, axiosConfig),
+        getApiBooking(axiosConfig),
+        getApiUser(axiosConfig),
+        getApiStaff(axiosConfig),
+        getApiAdminServices(axiosConfig),
       ]);
 
-      const customers = userRes.data.filter((u: any) => u.role === 4);
-      const staff = staffRes.data;
-      const services = serviceRes.data;
+      const bookingsData = extractData(bookingRes);
+      const usersData = extractData(userRes);
+      const staffData = extractData(staffRes);
+      const servicesData = extractData(serviceRes);
 
-      let filteredData = bookingRes.data;
+      const customers = Array.isArray(usersData) ? usersData.filter((u: any) => u.role === 4) : [];
+      const staff = Array.isArray(staffData) ? staffData : [];
+      const services = Array.isArray(servicesData) ? servicesData : [];
+
+      let filteredData = Array.isArray(bookingsData) ? bookingsData : [];
 
       if (isCustomer) {
-        filteredData = bookingRes.data.filter(
-          (b: any) => String(b.CustomerId || b.customerId) === String(loggedInUserId)
+        filteredData = filteredData.filter(
+          (b: any) => String(b.customerId || b.CustomerId) === String(loggedInUserId)
         );
       } else if (isAdmin) {
-        filteredData = bookingRes.data.filter(
-          (b: any) => (b.SalonName || b.salonName) === userSalonName
+        filteredData = filteredData.filter(
+          (b: any) => (b.salonName || b.SalonName) === userSalonName
         );
       }
 
       const mapped: Booking[] = filteredData
         .map((b: any, index: number) => {
           const customer = customers.find(
-            (c: any) => String(c.id || c._id) === String(b.CustomerId || b.customerId)
+            (c: any) => String(c.id || c._id) === String(b.customerId || b.CustomerId)
           );
           const staffMember = staff.find(
-            (s: any) => String(s.id || s._id) === String(b.StaffId || b.staffId)
+            (s: any) => String(s.id || s._id) === String(b.staffId || b.StaffId)
           );
           const service = services.find(
-            (s: any) => String(s.id || s._id) === String(b.ServiceId || b.serviceId)
+            (s: any) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
           );
 
-          let status = (b.Status || b.status || "pending").toLowerCase();
+          let status = (b.status || b.Status || "pending").toLowerCase();
           if (status === "complete") status = "completed";
 
           return {
             key: b._id || b.id || index,
             id: b._id || b.id,
-            customerName: customer?.FullName || customer?.fullName || customer?.name || "Unknown Customer",
-            serviceName: service?.serviceName || service?.name || "Unknown Service",
-            staffName: staffMember?.FullName || staffMember?.fullName || staffMember?.name || "Unknown Staff",
-            appointmentDate: dayjs(b.AppointmentDate || b.appointmentDate).format("DD MMM YYYY hh:mm A"),
-            amount: b.Amount || b.amount || 0,
+            customerName: customer?.fullName || customer?.FullName || customer?.name || "Unknown Customer",
+            serviceName: service?.serviceName || service?.ServiceName || service?.name || "Unknown Service",
+            staffName: staffMember?.name || staffMember?.Name || staffMember?.fullName || "Unknown Staff",
+            appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY hh:mm A"),
+            amount: b.amount || b.Amount || 0,
             status: status,
           };
         })
@@ -123,15 +141,12 @@ const Bookings = () => {
     }
 
     try {
-      await axios.put(
-        `${BOOKING_API}/${selectedBooking.id}`,
-        { Status: values.status },
-        axiosConfig
-      );
+      await putApiBookingId(selectedBooking.id, { status: values.status }, axiosConfig);
       message.success("Booking updated successfully");
       fetchBookings();
       setModalVisible(false);
       form.resetFields();
+      setSelectedBooking(null);
     } catch (error) {
       console.error(error);
       message.error("Failed to update booking");
@@ -150,7 +165,7 @@ const Bookings = () => {
     }
 
     try {
-      await axios.delete(`${BOOKING_API}/${record.id}`, axiosConfig);
+      await deleteApiBookingId(record.id, axiosConfig);
       message.success("Booking deleted successfully");
       fetchBookings();
     } catch (error) {
@@ -159,16 +174,28 @@ const Bookings = () => {
     }
   };
 
+  const handleEdit = (record: Booking) => {
+    if (record.status === "completed") {
+      message.warning("Cannot edit a completed booking");
+      return;
+    }
+
+    if (record.status === "cancelled") {
+      message.warning("Cannot edit a cancelled booking");
+      return;
+    }
+    
+    setSelectedBooking(record);
+    form.setFieldsValue({ status: record.status });
+    setModalVisible(true);
+  };
+
   const filteredBookings = bookings.filter((b) =>
     b.customerName?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const canEdit = (record: Booking) => {
-    return record.status !== "completed" && record.status !== "cancelled";
-  };
-
   return (
-    <>
+    <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Booking Management</h1>
@@ -183,26 +210,19 @@ const Bookings = () => {
           style={{ width: 300 }}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
+          allowClear
         />
       </Card>
 
       <Card>
-        <p className="p-2">All Booking Data</p>
+        <p className="p-2 mb-4">All Booking Data</p>
         <DataTable
           data={filteredBookings}
           loading={loading}
           showActions
           rowKey="key"
           tableType="bookings"
-          onEdit={(record: Booking) => {
-            if (!canEdit(record)) {
-              message.warning(`Cannot edit a ${record.status} booking`);
-              return;
-            }
-            setSelectedBooking(record);
-            form.setFieldsValue(record);
-            setModalVisible(true);
-          }}
+          onEdit={handleEdit}
           onDelete={handleDelete}
         />
       </Card>
@@ -213,21 +233,30 @@ const Bookings = () => {
         onClose={() => {
           setModalVisible(false);
           form.resetFields();
+          setSelectedBooking(null);
         }}
         title={
           <div className="flex items-center gap-2">
             <Scissors size={20} />
-            Update Booking
+            Update Booking Status
           </div>
         }
         onSubmit={handleFormSubmit}
         submitText="Update Booking"
       >
-        <InputField label="Customer Name" name="customerName" required />
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Customer Name
+          </label>
+          <div className="p-2 bg-gray-50 rounded border">
+            {selectedBooking?.customerName}
+          </div>
+        </div>
+        
         <SelectField
           label="Status"
           name="status"
-          required
+          required  
           options={[
             { value: "confirmed", label: "Confirmed" },
             { value: "completed", label: "Completed" },
@@ -235,7 +264,7 @@ const Bookings = () => {
           ]}
         />
       </ModalForm>
-    </>
+    </div>
   );
 };
 

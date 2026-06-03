@@ -3,13 +3,10 @@ import { Card, Button, Input, message, Tag } from "antd";
 import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import Modals from "../../Components/Ui/Modals";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
-import axios from "axios";
 import dayjs from "dayjs";
+import { getSalonBookingAPI } from '../../api/generated';
 
-const BOOKING_API = "http://localhost:5296/api/Booking";
-const USER_API = "http://localhost:5296/api/User";
-const STAFF_API = "http://localhost:5296/api/Staff";
-const SERVICE_API = "http://localhost:5296/api/AdminServices";
+const { getApiBooking, getApiUser, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
 
 const EmployeeBooking: React.FC = () => {
   const [bookings, setBookings] = useState<any[]>([]);
@@ -28,14 +25,28 @@ const EmployeeBooking: React.FC = () => {
     },
   };
 
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   const fetchBookings = async () => {
     setLoading(true);
     try {
-      const staffRes = await axios.get(STAFF_API, axiosConfig);
-      const staffList = staffRes.data || [];
+      const staffRes = await getApiStaff(axiosConfig);
+      const staffList = extractData(staffRes);
 
       const currentStaff = staffList.find((s: any) =>
-        (s.Email || s.email) === loggedInUserEmail
+        (s.email || s.Email) === loggedInUserEmail
       );
 
       if (!currentStaff) {
@@ -46,39 +57,40 @@ const EmployeeBooking: React.FC = () => {
       const staffId = currentStaff.id || currentStaff._id;
 
       const [bookingRes, userRes, serviceRes] = await Promise.all([
-        axios.get(BOOKING_API, axiosConfig),
-        axios.get(USER_API, axiosConfig),
-        axios.get(SERVICE_API, axiosConfig),
+        getApiBooking(axiosConfig),
+        getApiUser(axiosConfig),
+        getApiAdminServices(axiosConfig),
       ]);
 
-      const users = userRes.data || [];
-      const services = serviceRes.data || [];
+      const users = extractData(userRes);
+      const services = extractData(serviceRes);
+      const bookingsData = extractData(bookingRes);
 
-      const filteredBookings = bookingRes.data.filter((b: any) => {
-        const bookingStaffId = b.StaffId || b.staffId;
+      const filteredBookings = bookingsData.filter((b: any) => {
+        const bookingStaffId = b.staffId || b.StaffId;
         return String(bookingStaffId) === String(staffId);
       });
 
       const mapped = filteredBookings.map((b: any, index: number) => {
         const customer = users.find(
-          (u: any) => String(u.id || u._id) === String(b.CustomerId || b.customerId)
+          (u: any) => String(u.id || u._id) === String(b.customerId || b.CustomerId)
         );
 
         const service = services.find(
-          (s: any) => String(s.id || s._id) === String(b.ServiceId || b.serviceId)
+          (s: any) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
         );
 
         return {
           key: b._id || b.id || index,
           id: b._id || b.id,
-          customerName: customer?.FullName || customer?.fullName || "N/A",
+          customerName: customer?.fullName || customer?.FullName || "N/A",
           serviceName: service?.serviceName || "N/A",
-          appointmentDate: b.AppointmentDate || b.appointmentDate,
-          date: dayjs(b.AppointmentDate || b.appointmentDate).format("DD MMM YYYY"),
-          time: dayjs(b.AppointmentDate || b.appointmentDate).format("hh:mm A"),
-          amount: b.Amount || b.amount || 0,
-          status: (b.Status || b.status || "pending").toLowerCase(),
-          salonName: b.SalonName || b.salonName || "N/A",
+          appointmentDate: b.appointmentDate || b.AppointmentDate,
+          date: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY"),
+          time: dayjs(b.appointmentDate || b.AppointmentDate).format("hh:mm A"),
+          amount: b.amount || b.Amount || 0,
+          status: (b.status || b.Status || "pending").toLowerCase(),
+          salonName: b.salonName || b.SalonName || "N/A",
         };
       });
 
@@ -99,11 +111,7 @@ const EmployeeBooking: React.FC = () => {
   const handleStatusUpdate = async (newStatus: string) => {
     if (!selectedBooking) return;
     try {
-      await axios.put(
-        `${BOOKING_API}/${selectedBooking.id}`,
-        { status: newStatus },
-        axiosConfig
-      );
+      await putApiBookingId(selectedBooking.id, { status: newStatus }, axiosConfig);
       message.success(`Booking ${newStatus} successfully`);
       fetchBookings();
       setModalVisible(false);

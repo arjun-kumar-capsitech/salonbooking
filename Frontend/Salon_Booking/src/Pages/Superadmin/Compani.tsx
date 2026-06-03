@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Button, Input, message, Modal, Card, Form } from "antd";
 import { SearchOutlined, PlusOutlined, ShopOutlined, UserOutlined, EnvironmentOutlined, LockOutlined, MailOutlined, PhoneOutlined } from "@ant-design/icons";
-import axios from "axios";
-import { showSuperAdminCompani } from "../../Redux/Store/Slice/columnsSlice";
 import { useDispatch } from "react-redux";
+import { showSuperAdminCompani } from "../../Redux/Store/Slice/columnsSlice";
 import Modals from "../../Components/Ui/Modals";
 import { InputField, SelectField } from "../../Components/Ui/Forms";
 import { DataTable } from "../../Components/Ui/Table";
+import { getSalonBookingAPI } from '../../api/generated';
+
+const { getApiUser, putApiUserId, postApiUserRegisterAdmin, deleteApiUserId } = getSalonBookingAPI();
 
 const { confirm } = Modal;
 
@@ -21,8 +23,6 @@ interface Admin {
   role: number;
 }
 
-const API_URL = "http://localhost:5296/api/User";
-
 const Compani = () => {
   const dispatch = useDispatch();
   const [form] = Form.useForm();
@@ -32,6 +32,27 @@ const Compani = () => {
   const [admins, setAdmins] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const token = localStorage.getItem("authToken");
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   useEffect(() => {
     dispatch(showSuperAdminCompani());
   }, [dispatch]);
@@ -39,18 +60,19 @@ const Compani = () => {
   const loadAdmins = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL);
-      const filtered = response.data
+      const response = await getApiUser(axiosConfig);
+      const usersData = extractData(response);
+      const filtered = usersData
         .filter((u: any) => u.role === 2)
         .map((u: any, index: number) => ({
           key: u.id || u._id || index,
           id: u.id || u._id,
-          companyName: u.SalonName || u.salonName,
-          owner: u.FullName || u.fullName,
-          email: u.Email || u.email,
-          phone: u.PhoneNumber || u.phoneNumber,
+          companyName: u.salonName || u.SalonName,
+          owner: u.fullName || u.FullName,
+          email: u.email || u.Email,
+          phone: u.phoneNumber || u.PhoneNumber,
           status: u.isActive ? "active" : "inactive",
-          salonAddress: u.SalonAddress || u.salonAddress,
+          salonAddress: u.salonAddress || u.SalonAddress,
         }));
       setAdmins(filtered);
     } catch (error) {
@@ -67,7 +89,7 @@ const Compani = () => {
   const handleFormSubmit = async (values: any) => {
     try {
       if (selectedAdmin) {
-        await axios.put(`${API_URL}/${selectedAdmin.id}`, {
+        await putApiUserId(selectedAdmin.id, {
           fullName: values.owner,
           email: values.email,
           phoneNumber: values.phone,
@@ -75,10 +97,10 @@ const Compani = () => {
           salonAddress: values.salonAddress,
           role: 2,
           isActive: values.status === "active",
-        });
+        }, axiosConfig);
         message.success("Company updated successfully");
       } else {
-        await axios.post(`${API_URL}/register/admin`, {
+        await postApiUserRegisterAdmin({
           fullName: values.owner,
           email: values.email,
           phoneNumber: values.phone,
@@ -86,7 +108,7 @@ const Compani = () => {
           salonAddress: values.salonAddress,
           password: values.password,
           confirmPassword: values.confirmPassword,
-        });
+        }, axiosConfig);
         message.success("Company added successfully");
       }
       loadAdmins();
@@ -104,7 +126,7 @@ const Compani = () => {
       content: `Are you sure you want to delete ${record.owner}?`,
       async onOk() {
         try {
-          await axios.delete(`${API_URL}/${record.id}`);
+          await deleteApiUserId(record.id, axiosConfig);
           message.success("Company deleted successfully");
           loadAdmins();
         } catch (error) {
@@ -121,6 +143,7 @@ const Compani = () => {
       admin.email?.toLowerCase().includes(searchText.toLowerCase()) ||
       admin.phone?.toLowerCase().includes(searchText.toLowerCase())
   );
+
   const getStatusStyle = (status: string) => {
     return {
       color: status === "active" ? "#52c41a" : "#ff4d4f",

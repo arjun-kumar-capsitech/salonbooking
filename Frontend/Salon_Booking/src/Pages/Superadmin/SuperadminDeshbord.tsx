@@ -2,15 +2,14 @@ import { useState, useEffect } from 'react'
 import { Typography, Card, Button, Row, Col } from 'antd'
 import { ShopOutlined, TeamOutlined, DollarOutlined, MailOutlined, PhoneOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
 import { DataTable } from '../../Components/Ui/Table'
 import { StatCard } from '../../Components/Ui/Cards'
+import { getSalonBookingAPI } from '../../api/generated'
 
 const { Title, Text } = Typography
-const API_URL = "http://localhost:5296/api/User"
-const BOOKING_API = "http://localhost:5296/api/Booking"
+const { getApiUser, getApiBooking } = getSalonBookingAPI()
 
-const SuperAdminDeshbord = () => {
+const SuperAdminDashboard = () => {
   const navigate = useNavigate()
   const [companies, setCompanies] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
@@ -25,11 +24,25 @@ const SuperAdminDeshbord = () => {
     },
   }
 
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   const loadData = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(API_URL, axiosConfig)
-      const allUsers = res.data
+      const res = await getApiUser(axiosConfig)
+      const allUsers = extractData(res)
       
       const customers = allUsers.filter((u: any) => u.role === 4)
       const admins = allUsers.filter((u: any) => u.role === 2)
@@ -38,18 +51,18 @@ const SuperAdminDeshbord = () => {
 
       const companyData = admins.map((u: any, index: number) => ({
         id: u.id || u._id || index,
-        salonName: u.SalonName || u.salonName || "N/A",
-        owner: u.FullName || u.fullName || "N/A",
-        email: u.Email || u.email || "N/A",
-        phone: u.PhoneNumber || u.phoneNumber || "N/A",
+        salonName: u.salonName || u.SalonName || "N/A",
+        owner: u.fullName || u.FullName || "N/A",
+        email: u.email || u.Email || "N/A",
+        phone: u.phoneNumber || u.PhoneNumber || "N/A",
         adminId: u.id || u._id,
         status: u.isActive ? 'active' : 'inactive',
-        createdAt: u.CreatedAt || u.createdAt
+        createdAt: u.createdAt || u.CreatedAt
       }))
       setCompanies(companyData)
 
-      const bookingsRes = await axios.get(BOOKING_API, axiosConfig)
-      const allBookings = bookingsRes.data
+      const bookingsRes = await getApiBooking(axiosConfig)
+      const allBookings = extractData(bookingsRes)
 
       let totalRevenueAmount = 0
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -57,19 +70,17 @@ const SuperAdminDeshbord = () => {
 
       allBookings.forEach((booking: any) => {
         let amount = 0
-        if (booking.Amount) amount = parseFloat(booking.Amount)
-        else if (booking.amount) amount = parseFloat(booking.amount)
-        else if (booking.totalAmount) amount = parseFloat(booking.totalAmount)
-        else if (booking.price) amount = parseFloat(booking.price)
+        if (booking.amount) amount = parseFloat(booking.amount)
+        else if (booking.Amount) amount = parseFloat(booking.Amount)
         
         amount = isNaN(amount) ? 0 : amount
 
-        const status = (booking.Status || booking.status || "").toLowerCase()
+        const status = (booking.status || booking.Status || "").toLowerCase()
         
         if (status === 'completed' || status === 'confirmed') {
           totalRevenueAmount += amount
           
-          const bookingDate = booking.AppointmentDate || booking.appointmentDate || booking.CreatedAt || booking.createdAt || new Date()
+          const bookingDate = booking.appointmentDate || booking.AppointmentDate || booking.createdAt || booking.CreatedAt || new Date()
           const month = new Date(bookingDate).getMonth()
           revenueByMonth[month] += amount
         }
@@ -269,4 +280,4 @@ const SuperAdminDeshbord = () => {
   )
 }
 
-export default SuperAdminDeshbord
+export default SuperAdminDashboard

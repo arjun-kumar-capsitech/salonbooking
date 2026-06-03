@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Card, Button, Row, Col, Modal, Steps, DatePicker, TimePicker, Divider, message, Spin, Rate, Tag } from "antd";
-import { ShopOutlined, CheckCircleOutlined, ClockCircleOutlined,UserOutlined, EnvironmentOutlined } from "@ant-design/icons";
+import { ShopOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, EnvironmentOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-
+import { getSalonBookingAPI } from '../../api/generated';
 const { Step } = Steps;
 const stepsData = ["Services", "Date & Time", "Staff", "Confirm"];
-
+const {getApiAdminServices,getApiStaff,getApiUser,getApiTime,postApiBooking} = getSalonBookingAPI();
 const CustomerAppointment: React.FC = () => {
   const [servicesData, setServicesData] = useState<any[]>([]);
   const [staffData, setStaffData] = useState<any[]>([]);
@@ -25,6 +25,26 @@ const CustomerAppointment: React.FC = () => {
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   const getRandomRating = () => {
     return (3 + Math.random() * 2).toFixed(1);
   };
@@ -38,16 +58,16 @@ const CustomerAppointment: React.FC = () => {
       try {
         setLoading(true);
         const [servicesRes, staffRes, usersRes, timeRes] = await Promise.all([
-          fetch("http://localhost:5296/api/AdminServices"),
-          fetch("http://localhost:5296/api/Staff"),
-          fetch("http://localhost:5296/api/User"),
-          fetch("http://localhost:5296/api/Time"),
+          getApiAdminServices(axiosConfig),
+          getApiStaff(axiosConfig),
+          getApiUser(axiosConfig),
+          getApiTime(axiosConfig),
         ]);
 
-        const services = await servicesRes.json();
-        const staff = await staffRes.json();
-        const users = await usersRes.json();
-        const times = await timeRes.json();
+        const services = extractData(servicesRes);
+        const staff = extractData(staffRes);
+        const users = extractData(usersRes);
+        const times = extractData(timeRes);
 
         const activeServices = services.filter((s: any) => s.isActive === true);
         const activeStaff = staff.filter((s: any) => s.isActive === true);
@@ -60,10 +80,10 @@ const CustomerAppointment: React.FC = () => {
           .filter((u: any) => u.role === 2)
           .map((admin: any) => ({
             id: admin.id || admin._id,
-            name: admin.SalonName || admin.salonName || admin.fullName,
+            name: admin.salonName || admin.SalonName || admin.fullName,
             rating: getRandomRating(),
             reviews: getRandomReviews(),
-            address: admin.SalonAddress || admin.salonAddress || "Address not available",
+            address: admin.salonAddress || admin.SalonAddress || "Address not available",
             isOpen: true,
           }))
           .filter((salon: any) => salon.name);
@@ -83,14 +103,14 @@ const CustomerAppointment: React.FC = () => {
   const getFilteredServices = () => {
     if (!selectedSalonName) return servicesData;
     return servicesData.filter((service: any) => 
-      (service.SalonName || service.salonName) === selectedSalonName && service.isActive === true
+      (service.salonName || service.SalonName) === selectedSalonName && service.isActive === true
     );
   };
 
   const getFilteredStaff = () => {
     if (!selectedSalonName) return staffData;
     return staffData.filter((staff: any) => 
-      (staff.SalonName || staff.salonName) === selectedSalonName && staff.isActive === true
+      (staff.salonName || staff.SalonName) === selectedSalonName && staff.isActive === true
     );
   };
 
@@ -166,18 +186,9 @@ const CustomerAppointment: React.FC = () => {
         status: "pending",
       };
 
-      const res = await fetch("http://localhost:5296/api/Booking", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data = await res.json();
+      const res = await postApiBooking(payload, axiosConfig);
+      const data = extractData(res);
+      
       setCreatedBooking(data);
       setShowConfirmation(true);
 
@@ -203,7 +214,7 @@ const CustomerAppointment: React.FC = () => {
 
   if (step === -1) {
     return (
-      <div className="min-h-screen  from-blue-50 to-indigo-100 py-10 px-4">
+      <div className="min-h-screen from-blue-50 to-indigo-100 py-10 px-4">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-10">
             <h1 className="text-4xl font-bold text-gray-800 mb-3">Select Your Salon</h1>
@@ -223,7 +234,7 @@ const CustomerAppointment: React.FC = () => {
                 >
                   <div className="mb-4">
                     <div className="w-20 h-20 bg-[#183A37] rounded-full flex items-center justify-center mx-auto shadow-md">
-                  <ShopOutlined style={{ fontSize: '2rem', color: 'white' }} />
+                      <ShopOutlined style={{ fontSize: '2rem', color: 'white' }} />
                     </div>
                   </div>
                   <div className="font-bold text-xl mb-2">{salon.name}</div>
@@ -364,15 +375,15 @@ const CustomerAppointment: React.FC = () => {
                         <div className="flex items-center gap-4">
                           <div className="w-14 h-14 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center shadow-md">
                             <span className="text-2xl font-bold text-white">
-                              {(staff.FullName || staff.fullName || staff.name || "S").charAt(0)}
+                              {(staff.fullName || staff.FullName || staff.name || "S").charAt(0)}
                             </span>
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold text-lg">
-                              {staff.FullName || staff.fullName || staff.name}
+                              {staff.fullName || staff.FullName || staff.name}
                             </div>
                             <div className="text-gray-500 text-sm flex items-center gap-2">
-                              <UserOutlined /> {staff.Role || staff.role || "Stylist"}
+                              <UserOutlined /> {staff.role || staff.Role || "Stylist"}
                             </div>
                           </div>
                           <Tag color="green" className="rounded-full">Available</Tag>
@@ -384,7 +395,7 @@ const CustomerAppointment: React.FC = () => {
               </div>
             )}
 
-           {step === 3 && (
+            {step === 3 && (
               <div>
                 <h3 className="text-lg font-semibold mb-4 text-gray-700">Review Your Booking</h3>
                 <div className="bg-gray-50 p-6 rounded-xl">
@@ -395,7 +406,7 @@ const CustomerAppointment: React.FC = () => {
                     </div>
                     <div className="flex justify-between items-center pb-3 border-b">
                       <span className="text-gray-600">Stylist</span>
-                      <span className="font-semibold">{selectedStaff?.FullName || selectedStaff?.fullName || selectedStaff?.name}</span>
+                      <span className="font-semibold">{selectedStaff?.fullName || selectedStaff?.FullName || selectedStaff?.name}</span>
                     </div>
                     <div className="flex justify-between items-center pb-3 border-b">
                       <span className="text-gray-600">Salon</span>

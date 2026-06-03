@@ -13,82 +13,207 @@ namespace SalonBackend.Controllers
     public class BookingController : ControllerBase
     {
         private readonly BookingService _bookingService;
-
         public BookingController(BookingService bookingService)
         {
             _bookingService = bookingService;
         }
 
-     
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<ActionResult<ApiResponse<List<Booking>>>> GetAllBooking()
         {
-            var bookings = await _bookingService.GetAllAsync();
-            return Ok(bookings);
+            try
+            {
+                var bookings = await _bookingService.GetAllAsync();
+
+                return Ok(new ApiResponse<List<Booking>>
+                {
+                    Status = true,
+                    Message = "Bookings retrieved successfully",
+                    Result = bookings
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<Booking>>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetById(string id)
+        public async Task<ActionResult<ApiResponse<Booking>>> GetById(string id)
         {
-            var booking = await _bookingService.GetByIdAsync(id);
+            try
+            {
+                var booking = await _bookingService.GetByIdAsync(id);
 
-            if (booking == null)
-                return NotFound(new { message = "Booking not found" });
+                if (booking == null)
+                {
+                    return NotFound(new ApiResponse<Booking>
+                    { 
+                        Status = false,
+                        Message = "Booking not found",
+                        Result = null
+                    });
+                }
 
-            return Ok(booking);
+                return Ok(new ApiResponse<Booking>
+                {
+                    Status = true,
+                    Message = "Booking retrieved successfully",
+                    Result = booking
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<Booking>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
-
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] BookingDto dto)
+        public async Task<ActionResult<ApiResponse<Booking>>> Create([FromBody] BookingDto dto)
         {
-            if (dto == null)
-                return BadRequest(new { message = "Invalid booking data" });
-
-            var customerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-            if (string.IsNullOrEmpty(customerId))
-                return Unauthorized();
-
-            var booking = new Booking
+            try
             {
-                CustomerId = customerId,
-                StaffId = dto.StaffId,
-                ServiceId = dto.ServiceId,
-                AppointmentDate = dto.AppointmentDate,
-                SalonName = dto.SalonName,
-                Amount = dto.Amount,
-                Status = "pending"
-            };
+                if (dto == null)
+                {
+                    return BadRequest(new ApiResponse<Booking>
+                    {
+                        Status = false,
+                        Message = "Invalid booking data",
+                        Result = null
+                    });
+                }
 
-            var created = await _bookingService.CreateAsync(booking);
+                var customerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            return Ok(created);
+                if (string.IsNullOrEmpty(customerId))
+                {
+                    return Unauthorized(new ApiResponse<Booking>
+                    {
+                        Status = false,
+                        Message = "Unauthorized user",
+                        Result = null
+                    });
+                }
+
+                var booking = new Booking
+                {
+                    CustomerId = customerId,
+                    StaffId = dto.StaffId,
+                    ServiceId = dto.ServiceId,
+                    AppointmentDate = dto.AppointmentDate,
+                    SalonName = dto.SalonName,
+                    Amount = dto.Amount,
+                    Status = "pending"
+                };
+
+                var created = await _bookingService.CreateAsync(booking);
+
+                return Ok(new ApiResponse<Booking>
+                {
+                    Status = true,
+                    Message = "Booking created successfully",
+                    Result = created
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<Booking>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateStatus(string id, [FromBody] UpdateBookingStatusDto dto)
+        public async Task<ActionResult<ApiResponse<string>>> UpdateStatus(string id, [FromBody] UpdateBookingStatusDto dto)
         {
-            if (dto == null)
-                return BadRequest(new { message = "Invalid data" });
+            try
+            {
+                if (dto == null)
+                {
+                    return BadRequest(new ApiResponse<string>
+                    {
+                        Status = false,
+                        Message = "Invalid data",
+                        Result = null
+                    });
+                }
 
-            var success = await _bookingService.UpdateStatusAsync(id, dto.Status);
+                var success = await _bookingService.UpdateStatusAsync(id, dto.Status);
 
-            if (!success)
-                return NotFound(new { message = "Booking not found" });
+                if (!success)
+                {
+                    return NotFound(new ApiResponse<string>
+                    {
+                        Status = false,
+                        Message = "Booking not found",
+                        Result = null
+                    });
+                }
 
-            return Ok(new { message = "Booking status updated successfully" });
+                return Ok(new ApiResponse<string>
+                {
+                    Status = true,
+                    Message = "Booking status updated successfully",
+                    Result = "Updated"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(string id)
+        public async Task<ActionResult<ApiResponse<string>>> Delete(string id)
         {
-            var success = await _bookingService.DeleteAsync(id);
+            try
+            {
+                var success = await _bookingService.DeleteAsync(id);
 
-            if (!success)
-                return NotFound(new { message = "Booking not found" });
+                if (!success)
+                {
+                    return NotFound(new ApiResponse<string>
+                    {
+                        Status = false,
+                        Message = "Booking not found",
+                        Result = null
+                    });
+                }
 
-            return Ok(new { message = "Booking deleted successfully" });
+                return Ok(new ApiResponse<string>
+                {
+                    Status = true,
+                    Message = "Booking deleted successfully",
+                    Result = "Deleted"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<string>
+                {
+                    Status = false,
+                    Message = ex.Message,
+                    Result = null
+                });
+            }
         }
     }
 }

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Button, Input, message, Modal, Card,} from "antd";
+import { Button, Input, message, Modal, Card } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, ShopOutlined } from "@ant-design/icons";
-import axios from "axios";
 import { useDispatch } from "react-redux";
 import { showSuperAdminRequest } from "../../Redux/Store/Slice/columnsSlice";
 import { DataTable } from "../../Components/Ui/Table";
+import { getSalonBookingAPI } from '../../api/generated';
+
+const { getApiUser } = getSalonBookingAPI();
 
 interface SalonRequest {
   id: string;
@@ -14,8 +16,6 @@ interface SalonRequest {
   requestDate: string;
   status: string;
 }
-
-const API_URL = "http://localhost:5296/api/User";
 
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusColor = () => {
@@ -57,6 +57,27 @@ const Request = () => {
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<SalonRequest | null>(null);
 
+  const token = localStorage.getItem("authToken");
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    return [];
+  };
+
   useEffect(() => {
     dispatch(showSuperAdminRequest());
   }, [dispatch]);
@@ -64,17 +85,18 @@ const Request = () => {
   const loadRequests = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(API_URL);
+      const res = await getApiUser(axiosConfig);
+      const usersData = extractData(res);
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
 
-      const formatted = res.data
+      const formatted = usersData
         .filter((u: any) => u.role === 2)
         .map((u: any) => ({
           id: u.id || u._id,
-          companyName: u.SalonName || u.salonName,
-          owner: u.FullName || u.fullName,
-          email: u.Email || u.email,
-          requestDate: u.CreatedAt || u.createdAt || new Date().toISOString(),
+          companyName: u.salonName || u.SalonName,
+          owner: u.fullName || u.FullName,
+          email: u.email || u.Email,
+          requestDate: u.createdAt || u.CreatedAt || new Date().toISOString(),
           status: savedStatus[u.id || u._id] || "pending",
         }));
 

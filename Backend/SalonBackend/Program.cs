@@ -5,6 +5,7 @@ using MongoDB.Driver;
 using SalonBackend.Services;
 using System.Text;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options =>

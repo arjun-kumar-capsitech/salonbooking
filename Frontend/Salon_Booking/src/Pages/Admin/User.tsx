@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Card, Button, Input, Select, Form, message } from 'antd';
 import { PlusOutlined, SearchOutlined, MailOutlined } from '@ant-design/icons';
 import { UserCog } from 'lucide-react';
-import axios from 'axios';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from "dayjs";
+import { getSalonBookingAPI } from '../../api/generated';
+
+const {getApiUser,getApiStaff,putApiUserId,postApiUserRegisterEmployee,postApiUserRegisterCustomer,deleteApiUserId} = getSalonBookingAPI();
 
 const { Option } = Select;
 
@@ -20,9 +22,7 @@ const User = () => {
   const [searchText, setSearchText] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  const API_URL = "http://localhost:5296/api/User";
-  const STAFF_API = "http://localhost:5296/api/Staff";
+  const [staffList, setStaffList] = useState<any[]>([]);
 
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -36,20 +36,50 @@ const User = () => {
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
+  };
+
+  const extractData = (response: any) => {
+    if (!response || !response.data) return [];
+    if (response.data?.status === true && response.data?.result) {
+      return response.data.result;
+    }
+    if (response.data?.result) {
+      return response.data.result;
+    }
+    if (Array.isArray(response.data)) {
+      return response.data;
+    }
+    
+    return [];
+  };
+
+  const fetchStaff = async () => {
+    try {
+      const response = await getApiStaff(axiosConfig);
+      const staffData = extractData(response);
+      const mapped = staffData.map((s: any) => ({
+        id: s.id || s._id,
+        name: s.name || s.Name || s.fullName,
+        email: s.email || s.Email,
+        salonName: s.salonName || s.SalonName
+      }));
+      setStaffList(mapped);
+    } catch (error) {
+      console.error("Error fetching staff:", error);
+    }
   };
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const [staffRes, usersRes] = await Promise.all([
-        axios.get(STAFF_API, axiosConfig),
-        axios.get(API_URL, axiosConfig)
+        getApiStaff(axiosConfig),
+        getApiUser(axiosConfig)
       ]);
-      
-      const staffList = staffRes.data || [];
-      const allUsers = usersRes.data || [];
-      
+      const staffList = extractData(staffRes);
+      const allUsers = extractData(usersRes);
       let filtered = allUsers.filter((u: any) => u.role === 3 || u.role === 4);
       
       if (isCustomer) {
@@ -58,11 +88,11 @@ const User = () => {
         if (userSalonName) {
           const employeeEmailsInSalon = staffList
             .filter((s: any) => {
-              const staffSalon = (s.SalonName || s.salonName || "").toString().trim();
+              const staffSalon = (s.salonName || s.SalonName || "").toString().trim();
               const adminSalon = userSalonName.toString().trim();
               return staffSalon.toLowerCase() === adminSalon.toLowerCase();
             })
-            .map((s: any) => (s.Email || s.email || "").toLowerCase());
+            .map((s: any) => (s.email || s.Email || "").toLowerCase());
           
           filtered = filtered.filter((u: any) => {
             if (u.role === 4) {
@@ -77,12 +107,22 @@ const User = () => {
           filtered = filtered.filter((u: any) => u.role === 4);
         }
       }
+  
+      const normalized = filtered.map((u: any) => ({
+        id: u.id || u._id,
+        fullName: u.fullName || u.FullName,
+        email: u.email || u.Email,
+        role: u.role || u.Role,
+        isActive: u.isActive !== undefined ? u.isActive : u.IsActive,
+        createdAt: u.createdAt || u.CreatedAt,
+        phoneNumber: u.phoneNumber || u.PhoneNumber
+      }));
       
-      setUsers(filtered);
-      setFilteredUsers(filtered);
-    } catch (error) {
+      setUsers(normalized);
+      setFilteredUsers(normalized);
+    } catch (error: any) {
       console.error(error);
-      message.error("Failed to load users");
+      message.error(error.response?.data?.message || "Failed to load users");
     } finally {
       setLoading(false);
     }
@@ -90,6 +130,7 @@ const User = () => {
 
   useEffect(() => {
     fetchUsers();
+    fetchStaff();
   }, []);
 
   const applyFilters = () => {
@@ -131,38 +172,66 @@ const User = () => {
           role: Number(values.role),
           isActive: values.isActive === "true"
         };
-        await axios.put(`${API_URL}/${editingUser.id}`, payload, axiosConfig);
+        await putApiUserId(editingUser.id, payload, axiosConfig);
         message.success("User updated successfully");
       } else {
-        const newPayload = {
-          fullName: values.fullName,
-          email: values.email,
-          phoneNumber: values.phoneNumber || "",
-          password: values.password || "123456",
-          role: Number(values.role),
-          isActive: true
-        };
-        await axios.post(`${API_URL}/register`, newPayload, axiosConfig);
-        message.success("User registered successfully");
+        if (values.role === 3) {
+          const payload = {
+            staffId: values.staffId
+          };
+          const response = await postApiUserRegisterEmployee(payload, axiosConfig);
+          
+          if (response.data?.status === true) {
+            message.success("Employee registered successfully");
+          } else {
+            message.error(response.data?.message || "Employee registration failed");
+            return;
+          }
+        } else if (values.role === 4) {
+          const payload = {
+            fullName: values.fullName,
+            email: values.email,
+            phoneNumber: values.phoneNumber || "",
+            password: values.password || "123456",
+            confirmPassword: values.password || "123456"
+          };
+          const response = await postApiUserRegisterCustomer(payload, axiosConfig);
+          
+          if (response.data?.status === true) {
+            message.success("Customer registered successfully");
+          } else {
+            message.error(response.data?.message || "Customer registration failed");
+            return;
+          }
+        } else {
+          message.error("Invalid role selected");
+          return;
+        }
       }
 
       setModalVisible(false);
       setEditingUser(null);
       form.resetFields();
       fetchUsers();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      message.error("Failed to save user");
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.Message || "Failed to save user";
+      message.error(errorMsg);
     }
   };
 
   const handleDelete = async (record: any) => {
     try {
-      await axios.delete(`${API_URL}/${record.id}`, axiosConfig);
-      message.success("User deleted successfully");
-      fetchUsers();
-    } catch {
-      message.error("Failed to delete user");
+      const response = await deleteApiUserId(record.id, axiosConfig);
+      if (response.data?.status === true) {
+        message.success("User deleted successfully");
+        fetchUsers();
+      } else {
+        message.error(response.data?.message || "Failed to delete user");
+      }
+    } catch (err: any) {
+      console.error(err);
+      message.error(err?.response?.data?.message || "Failed to delete user");
     }
   };
 
@@ -172,7 +241,7 @@ const User = () => {
       dataIndex: 'fullName',
       key: 'fullName',
       render: (text: string) => (
-        <div className="font-semibold">{text}</div>
+        <div className="font-semibold">{text || 'N/A'}</div>
       )
     },
     {
@@ -203,13 +272,13 @@ const User = () => {
       title: 'Created At',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date: string) => dayjs(date).format("DD MMM YYYY hh:mm A"),
+      render: (date: string) => date ? dayjs(date).format("DD MMM YYYY hh:mm A") : 'N/A',
       width: 180
     }
   ];
 
   return (
-    <>
+    <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">User Management</h1>
@@ -221,6 +290,7 @@ const User = () => {
           onClick={() => {
             setEditingUser(null);
             form.resetFields();
+            form.setFieldsValue({ role: 4, isActive: "true" });
             setModalVisible(true);
           }}
         >
@@ -236,6 +306,7 @@ const User = () => {
             style={{ width: 300 }}
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
+            allowClear
           />
 
           <Select
@@ -261,7 +332,7 @@ const User = () => {
       </Card>
 
       <Card>
-        <p className='p-2'>Employee & Customer users</p>
+        <p className='p-2 mb-4'>Employee & Customer users</p>
         <DataTable
           data={filteredUsers}
           columns={columns}
@@ -278,10 +349,12 @@ const User = () => {
           }}
           onDelete={handleDelete}
           showActions={true}
+          rowKey="id"
         />
       </Card>
 
       <ModalForm
+        form={form}
         open={modalVisible}
         onClose={() => {
           setModalVisible(false);
@@ -300,7 +373,6 @@ const User = () => {
             : { role: 4, isActive: "true" }
         }
         onSubmit={handleFormSubmit}
-        loading={false}
         submitText={editingUser ? 'Update User' : 'Add User'}
       >
         <InputField
@@ -319,13 +391,34 @@ const User = () => {
         />
 
         {!editingUser && (
-          <InputField
-            label="Password"
-            name="password"
-            placeholder="Enter password"
-            type="password"
-            required={true}
-          />
+          <>
+            <InputField
+              label="Password"
+              name="password"
+              placeholder="Enter password"
+              type="password"
+              required={true}
+            />
+            
+            {/* Show staff selection only for Employee role */}
+            <Form.Item noStyle shouldUpdate>
+              {({ getFieldValue }) => {
+                const role = getFieldValue('role');
+                return role === 3 ? (
+                  <SelectField
+                    label="Select Staff"
+                    name="staffId"
+                    required={true}
+                    options={staffList.map((staff: any) => ({
+                      value: staff.id,
+                      label: staff.name || staff.email
+                    }))}
+                    placeholder="Select staff member"
+                  />
+                ) : null;
+              }}
+            </Form.Item>
+          </>
         )}
 
         <SelectField
@@ -350,7 +443,7 @@ const User = () => {
           ]}
         />
       </ModalForm>
-    </>
+    </div>
   );
 };
 

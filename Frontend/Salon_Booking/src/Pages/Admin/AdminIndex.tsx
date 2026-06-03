@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { StatCard } from '../../Components/Ui/Cards';
 import { useEffect, useState } from 'react';
-import { Card, Button, Row, Col, } from 'antd';
-import axios from 'axios';
+import { Card, Button, Row, Col } from 'antd';
+import { getSalonBookingAPI } from '../../api/generated';
 
+const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
 
 const AdminIndex = () => {
   const navigate = useNavigate();
@@ -15,9 +16,7 @@ const AdminIndex = () => {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
-  const BOOKING_API = "http://localhost:5296/api/Booking";
-  const STAFF_API = "http://localhost:5296/api/Staff";
-  const SERVICE_API = "http://localhost:5296/api/AdminServices";
+  
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user?.Role || user?.role;
@@ -31,26 +30,40 @@ const AdminIndex = () => {
     },
   };
 
+  const extractData = (response: any) => {
+    if (!response) return [];
+    const data = response.data;
+    if (data?.status === true && data?.result) {
+      return data.result;
+    }
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data?.result) {
+      return data.result;
+    }
+    return [];
+  };
+
   const fetchStaff = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(STAFF_API, axiosConfig);
+      const res = await getApiStaff(axiosConfig);
+      let staffData = extractData(res);
+      let filteredStaff = Array.isArray(staffData) ? staffData : [];
 
-      let filteredStaff = res.data;
-      if (isAdmin && !isSuperAdmin) {
-        if (userSalonName) {
-          filteredStaff = res.data.filter((s: any) =>
-            (s.SalonName || s.salonName) === userSalonName
-          );
-        }
+      if (isAdmin && !isSuperAdmin && userSalonName) {
+        filteredStaff = filteredStaff.filter((s: any) =>
+          (s.salonName || s.SalonName) === userSalonName
+        );
       }
-
+      
       const normalized = filteredStaff.map((s: any, index: any) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
-        name: s.FullName || s.fullName || s.name || "N/A",
-        role: s.Role || s.role || "Employee",
-        status: s.isActive ? 'active' : 'inactive'
+        name: s.name || s.Name || s.fullName || s.FullName || "N/A",
+        role: s.role || s.Role || "Employee",
+        status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
       }));
       setStaffList(normalized);
     } catch (err) {
@@ -62,25 +75,23 @@ const AdminIndex = () => {
 
   const fetchServices = async () => {
     try {
-      const res = await axios.get(SERVICE_API, axiosConfig);
-
-      let filteredServices = res.data;
-
-      if (isAdmin && !isSuperAdmin) {
-        if (userSalonName) {
-          filteredServices = res.data.filter((s: any) =>
-            (s.SalonName || s.salonName) === userSalonName
-          );
-        }
+      const res = await getApiAdminServices(axiosConfig);
+      let servicesData = extractData(res);
+      let filteredServices = Array.isArray(servicesData) ? servicesData : [];
+      
+      if (isAdmin && !isSuperAdmin && userSalonName) {
+        filteredServices = filteredServices.filter((s: any) =>
+          (s.salonName || s.SalonName) === userSalonName
+        );
       }
 
       const normalized = filteredServices.map((s: any, index: number) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
-        name: s.serviceName || s.name || "N/A",
-        duration: s.duration,
-        price: s.price,
-        status: s.isActive ? 'active' : 'inactive'
+        name: s.serviceName || s.ServiceName || s.name || "N/A",
+        duration: s.duration || s.Duration || 0,
+        price: s.price || s.Price || 0,
+        status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
       }));
       setServices(normalized);
     } catch (err) {
@@ -90,31 +101,29 @@ const AdminIndex = () => {
 
   const fetchBookings = async () => {
     try {
-      const res = await axios.get(BOOKING_API, axiosConfig);
+      const res = await getApiBooking(axiosConfig);
+      let bookingsData = extractData(res);
+      
+      let filteredBookings = Array.isArray(bookingsData) ? bookingsData : [];
 
-      let filteredBookings = res.data;
-
-      if (isAdmin && !isSuperAdmin) {
-        if (userSalonName) {
-          filteredBookings = res.data.filter((b: any) =>
-            (b.SalonName || b.salonName) === userSalonName
-          );
-        }
+      if (isAdmin && !isSuperAdmin && userSalonName) {
+        filteredBookings = filteredBookings.filter((b: any) =>
+          (b.salonName || b.SalonName) === userSalonName
+        );
       }
 
       const mapped = filteredBookings.map((b: any, index: number) => {
         let amount = 0;
         if (b.amount) amount = parseFloat(b.amount);
-        else if (b.totalAmount) amount = parseFloat(b.totalAmount);
-        else if (b.price) amount = parseFloat(b.price);
         else if (b.Amount) amount = parseFloat(b.Amount);
-
+        
         return {
           id: b.id || b._id || index,
           amount: isNaN(amount) ? 0 : amount,
-          date: b.AppointmentDate || b.appointmentDate || b.createdAt || new Date()
+          date: b.appointmentDate || b.AppointmentDate || b.createdAt || b.CreatedAt || new Date()
         };
       });
+      
       setBookings(mapped);
 
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -138,14 +147,16 @@ const AdminIndex = () => {
   };
 
   useEffect(() => {
-    fetchStaff();
-    fetchServices();
-    fetchBookings();
-  }, []);
+    if (token) {
+      fetchStaff();
+      fetchServices();
+      fetchBookings();
+    }
+  }, [token]);
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
-  const maxYValue = 30000;
-  const yAxisLabels = [30000, 22500, 15000, 7500, 0];
+  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
+  const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
 
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
@@ -153,7 +164,7 @@ const AdminIndex = () => {
     {
       title: 'Price',
       dataIndex: 'price',
-      render: (price: number) => `$${price}`
+      render: (price: number) => `$${price?.toFixed(2) || '0.00'}`
     },
     {
       title: 'Status',
@@ -172,8 +183,18 @@ const AdminIndex = () => {
     }
   ];
 
+  if (!token) {
+    return (
+      <div className="p-6 text-center">
+        <Card>
+          <p>Please login to view dashboard</p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <>
+    <div className="p-6">
       <div>
         <h1 className="text-2xl font-bold mb-2">Admin Dashboard Overview</h1>
         <p className="text-gray-600 mb-6">
@@ -201,7 +222,7 @@ const AdminIndex = () => {
 
           <Col xs={24} sm={8} md={8}>
             <StatCard
-              title=" Total Revenue"
+              title="Total Revenue"
               value={`$${revenue.toLocaleString()}`}
               icon={<DollarOutlined />}
               color="#ff7b00"
@@ -213,7 +234,7 @@ const AdminIndex = () => {
           <div className="flex h-80">
             <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
               {yAxisLabels.map((label, idx) => (
-                <div key={idx}>${label.toLocaleString()}</div>
+                <div key={idx}>${Math.round(label).toLocaleString()}</div>
               ))}
             </div>
 
@@ -226,20 +247,18 @@ const AdminIndex = () => {
                 </div>
                 <div className="relative h-full flex items-end gap-2">
                   {monthlyData.map((data, idx) => {
-                    const barHeight = Math.min((data.revenue / maxYValue) * 100, 100);
+                    const barHeight = maxYValue > 0 ? (data.revenue / maxYValue) * 100 : 0;
                     return (
                       <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end">
                         <div
-                          className="w-full bg-gradient-to-t from-[#023e7d] to-[#023e7d] rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#0466c8] cursor-pointer"
+                          className="w-full bg-gradient-to-t from-[#023e7d] to-[#0466c8] rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#035c9e] cursor-pointer relative group"
                           style={{
                             height: `${barHeight}%`,
                             minHeight: data.revenue > 0 ? '4px' : '0px'
                           }}
                         >
-                          <div className="text-center -mt-6 opacity-0 hover:opacity-100 transition-opacity">
-                            <span className="bg-gray-800 text-white text-xs rounded px-2 py-1">
-                              ${data.revenue.toLocaleString()}
-                            </span>
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                            ${data.revenue.toLocaleString()}
                           </div>
                         </div>
                         <div className="text-center mt-2">
@@ -254,7 +273,7 @@ const AdminIndex = () => {
           </div>
 
           <div className="mt-4 pt-3 text-center text-gray-500 text-sm">
-            <span>Monthly revenue performance (Target: $30,000)</span>
+            <span>Monthly revenue performance (Target: ${maxYValue.toLocaleString()})</span>
           </div>
         </Card>
 
@@ -271,7 +290,8 @@ const AdminIndex = () => {
               data={services}
               columns={serviceColumns}
               showActions={false}
-              rowKey="id"
+              rowKey="key"
+              loading={loading}
             />
           </Card>
 
@@ -288,12 +308,12 @@ const AdminIndex = () => {
               columns={staffColumns}
               loading={loading}
               showActions={false}
-              rowKey="id"
+              rowKey="key"
             />
           </Card>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 

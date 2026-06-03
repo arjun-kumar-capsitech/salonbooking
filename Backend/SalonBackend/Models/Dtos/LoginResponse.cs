@@ -2,12 +2,12 @@ namespace SalonBackend.Models.Dtos
 {
     public class LoginResponse
     {
-        public string Token { get; set; }
-        public string UserId { get; set; }
-        public string FullName { get; set; }
-        public string Email { get; set; }
-        public string Role { get; set; }
-        public string? CompanyId { get; set; }
-        public DateTime ExpiresAt { get; set; }
+        public string Token { get; set; } = string.Empty;
+        public string UserId { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+         public string Role { get; set; } = string.Empty;
+        public string? CompanyId { get; set; }  = string.Empty;
+        public DateTime ExpiresAt { get; set; } 
     }
 }
