@@ -2,10 +2,11 @@ import { Form, Input, TimePicker, Button, Tabs, Row, Col, Switch, Card, message 
 import { SaveOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
 import dayjs, { Dayjs } from "dayjs";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { TabPane } = Tabs;
-const { getApiUserId,putApiUserId,getApiTime,postApiTime,putApiTimeDay,} = getSalonBookingAPI();
+const { getApiUserId, putApiUserId, getApiTime, postApiTime, putApiTimeDay } = getSalonBookingAPI();
 
 interface DayTiming {
   id?: string;
@@ -21,10 +22,8 @@ const Settings = () => {
   const [form] = Form.useForm();
   const [selectedDay, setSelectedDay] = useState("Monday");
   const [adminId, setAdminId] = useState<string>("");
-  
-  const days = [
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
-  ];
+  const queryClient = useQueryClient();
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   
   const defaultTimings: TimingRecord = {
     Monday: { day: "Monday", opening: "09:00", closing: "18:00", isOpen: true },
@@ -37,109 +36,73 @@ const Settings = () => {
   };
   
   const [timings, setTimings] = useState<TimingRecord>(defaultTimings);
-
   const token = localStorage.getItem("authToken");
   const loginUser = JSON.parse(localStorage.getItem("user") || "{}");
-
+  
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   };
-
+  
   const extractData = (response: any) => {
     if (!response || !response.data) return null;
-    if (response.data?.status === true && response.data?.result) {
-      return response.data.result;
-    }
-    if (response.data?.result) {
-      return response.data.result;
-    }
+    if (response.data?.status === true && response.data?.result) return response.data.result;
+    if (response.data?.result) return response.data.result;
     return response.data;
   };
-
-  const loadSalonData = async () => {
-    try {
-      if (!loginUser?.id) {
-        message.error("User not found");
-        return;
-      }
-
-      setAdminId(loginUser.id);
-
-      const userRes = await getApiUserId(loginUser.id, axiosConfig);
-      const userData = extractData(userRes);
-      const admin = userData;
-
-      form.setFieldsValue({
-        name: admin?.salonName || admin?.SalonName,
-        email: admin?.email || admin?.Email,
-        phone: admin?.phoneNumber || admin?.PhoneNumber,
-        address: admin?.salonAddress || admin?.SalonAddress
-      });
-
-      const timeRes = await getApiTime(axiosConfig);
-      let allTimings = extractData(timeRes);
-      
-      if (!Array.isArray(allTimings)) {
-        allTimings = [];
-      }
-      
-      const userTimings = allTimings.filter((t: any) =>
-        t.userId === loginUser.id || t.UserId === loginUser.id
-      );
-
-      if (userTimings.length > 0) {
-        const updatedTimings = { ...defaultTimings };
-
-        userTimings.forEach((t: any) => {
-          updatedTimings[t.day || t.Day] = {
-            id: t.id || t._id,
-            day: t.day || t.Day,
-            opening: t.opening || t.Opening,
-            closing: t.closing || t.Closing,
-            isOpen: t.isOpen !== undefined ? t.isOpen : t.IsOpen
-          };
-        });
-
-        setTimings(updatedTimings);
-      }
-    } catch (err) {
-      console.log(err);
-      message.error("Failed to load salon data");
-    }
-  };
-
+  
+  const { data: userData, isLoading: userLoading } = useQuery({
+    queryKey: ['user', loginUser?.id], staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
+    enabled: !!loginUser?.id && !!token,
+    queryFn: async () => {
+      const response = await getApiUserId(loginUser.id, axiosConfig);
+      return extractData(response);
+    },
+  });
+  
+  const { data: timingsData, isLoading: timingsLoading } = useQuery({
+    queryKey: ['timings', loginUser?.id],staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
+    enabled: !!loginUser?.id && !!token,
+    queryFn: async () => {
+      const response = await getApiTime(axiosConfig);
+      let allTimings = extractData(response);
+      if (!Array.isArray(allTimings)) allTimings = [];
+      return allTimings.filter((t: any) => t.userId === loginUser.id || t.UserId === loginUser.id);
+    },
+  });
+  
   useEffect(() => {
-    if (token && loginUser?.id) {
-      loadSalonData();
+    if (userData) {
+      setAdminId(loginUser.id);
+      form.setFieldsValue({
+        name: userData?.salonName || userData?.SalonName,
+        email: userData?.email || userData?.Email,
+        phone: userData?.phoneNumber || userData?.PhoneNumber,
+        address: userData?.salonAddress || userData?.SalonAddress
+      });
     }
-  }, [token]);
-
-  const handleTimeChange = (time: Dayjs | null, type: "opening" | "closing") => {
-    if (time) {
-      setTimings(prev => ({
-        ...prev,
-        [selectedDay]: {
-          ...prev[selectedDay],
-          [type]: time.format("HH:mm")
-        }
-      }));
+  }, [userData, form, loginUser.id]);
+  
+  useEffect(() => {
+    if (timingsData && timingsData.length > 0) {
+      const updatedTimings = { ...defaultTimings };
+      timingsData.forEach((t: any) => {
+        updatedTimings[t.day || t.Day] = {
+          id: t.id || t._id,
+          day: t.day || t.Day,
+          opening: t.opening || t.Opening,
+          closing: t.closing || t.Closing,
+          isOpen: t.isOpen !== undefined ? t.isOpen : t.IsOpen
+        };
+      });
+      setTimings(updatedTimings);
     }
-  };
-
-  const getTimeValue = (timeString: string) => {
-    return timeString ? dayjs(timeString, "HH:mm") : null;
-  };
-
-  const handleSave = async () => {
-    try {
-      const values = await form.validateFields();
-      
-      const userRes = await getApiUserId(adminId, axiosConfig);
-      const userData = extractData(userRes);
-      
+  }, [timingsData]);
+  
+  const updateProfileMutation = useMutation({
+    mutationFn: async (values: any) => {
       await putApiUserId(adminId, {
         fullName: userData?.fullName || userData?.FullName,
         email: values.email,
@@ -149,44 +112,64 @@ const Settings = () => {
         role: userData?.role || userData?.Role,
         isActive: userData?.isActive !== undefined ? userData.isActive : userData?.IsActive
       }, axiosConfig);
-
+    },
+    onSuccess: () => {
+      message.success("Profile updated successfully");
+      queryClient.invalidateQueries({ queryKey: ['user', loginUser?.id] });
+    },
+    onError: (error: any) => {
+      message.error(error?.response?.data?.message || "Failed to update profile");
+    },
+  });
+  
+  const saveTimingsMutation = useMutation({
+    mutationFn: async () => {
       const existingTimesRes = await getApiTime(axiosConfig);
       let existingTimes = extractData(existingTimesRes);
-      
-      if (!Array.isArray(existingTimes)) {
-        existingTimes = [];
-      }
-      
+      if (!Array.isArray(existingTimes)) existingTimes = [];
       const timePromises = Object.entries(timings).map(async ([day, timing]) => {
         const existing = existingTimes.find(
           (t: any) => (t.day === day || t.Day === day) && (t.userId === adminId || t.UserId === adminId)
         );
-
-        const payload = {
-          day: day,
-          opening: timing.opening,
-          closing: timing.closing,
-          isOpen: timing.isOpen
-        };
-
+        const payload = { day, opening: timing.opening, closing: timing.closing, isOpen: timing.isOpen };
         if (existing) {
           await putApiTimeDay(day, payload, axiosConfig);
         } else {
           await postApiTime(payload, axiosConfig);
         }
       });
-
       await Promise.all(timePromises);
-
-      message.success("Salon settings updated successfully");
-      loadSalonData();
-
-    } catch (error) {
-      console.log(error);
-      message.error("Failed to save settings");
+    },
+    onSuccess: () => {
+      message.success("Working hours updated successfully");
+      queryClient.invalidateQueries({ queryKey: ['timings', loginUser?.id] });
+    },
+    onError: (error: any) => {
+      message.error(error?.response?.data?.message || "Failed to update working hours");
+    },
+  });
+  
+  const handleTimeChange = (time: Dayjs | null, type: "opening" | "closing") => {
+    if (time) {
+      setTimings(prev => ({
+        ...prev,
+        [selectedDay]: { ...prev[selectedDay], [type]: time.format("HH:mm") }
+      }));
     }
   };
-
+  
+  const getTimeValue = (timeString: string) => {
+    return timeString ? dayjs(timeString, "HH:mm") : null;
+  };
+  const handleSave = async () => {
+    const values = await form.validateFields();
+    await updateProfileMutation.mutateAsync(values);
+    await saveTimingsMutation.mutateAsync();
+    message.success("Salon settings updated successfully");
+  };
+  
+  const isLoading = userLoading || timingsLoading || updateProfileMutation.isPending || saveTimingsMutation.isPending;
+  
   return (
     <div className="p-6">
       <div className="mb-6">
@@ -200,32 +183,16 @@ const Settings = () => {
             <Col span={12}>
               <Card title="Manage your profile" className="border-0 shadow-lg h-full">
                 <Form form={form} layout="vertical">
-                  <Form.Item
-                    label="Salon Name"
-                    name="name"
-                    rules={[{ required: true, message: "Salon name is required" }]}
-                  >
+                  <Form.Item label="Salon Name" name="name" rules={[{ required: true, message: "Salon name is required" }]}>
                     <Input placeholder="Enter salon name" />
                   </Form.Item>
-                  <Form.Item
-                    label="Salon Email"
-                    name="email"
-                    rules={[{ required: true, message: "Email is required" }, { type: 'email', message: 'Enter valid email' }]}
-                  >
+                  <Form.Item label="Salon Email" name="email" rules={[{ required: true, message: "Email is required" }, { type: 'email', message: 'Enter valid email' }]}>
                     <Input placeholder="Enter email" />
                   </Form.Item>
-                  <Form.Item
-                    label="Salon Phone"
-                    name="phone"
-                    rules={[{ required: true, message: "Phone number is required" }]}
-                  >
+                  <Form.Item label="Salon Phone" name="phone" rules={[{ required: true, message: "Phone number is required" }]}>
                     <Input placeholder="Enter phone number" />
                   </Form.Item>
-                  <Form.Item
-                    label="Salon Address"
-                    name="address"
-                    rules={[{ required: true, message: "Address is required" }]}
-                  >
+                  <Form.Item label="Salon Address" name="address" rules={[{ required: true, message: "Address is required" }]}>
                     <Input.TextArea rows={2} placeholder="Enter address" />
                   </Form.Item>
                 </Form>
@@ -243,6 +210,7 @@ const Settings = () => {
                         type={selectedDay === day ? "primary" : "default"}
                         size="small"
                         onClick={() => setSelectedDay(day)}
+                        disabled={isLoading}
                       >
                         {day}
                       </Button>
@@ -255,16 +223,9 @@ const Settings = () => {
                       <span className="text-sm">Closed</span>
                       <Switch
                         checked={timings[selectedDay]?.isOpen}
-                        onChange={checked =>
-                          setTimings(prev => ({
-                            ...prev,
-                            [selectedDay]: {
-                              ...prev[selectedDay],
-                              isOpen: checked
-                            }
-                          }))
-                        }
+                        onChange={checked => setTimings(prev => ({ ...prev, [selectedDay]: { ...prev[selectedDay], isOpen: checked } }))}
                         size="small"
+                        disabled={isLoading}
                       />
                       <span className="text-sm">Open</span>
                     </div>
@@ -279,6 +240,7 @@ const Settings = () => {
                           format="HH:mm"
                           style={{ width: "100%" }}
                           onChange={time => handleTimeChange(time, "opening")}
+                          disabled={isLoading}
                         />
                       </div>
                       <div className="flex-1">
@@ -288,22 +250,20 @@ const Settings = () => {
                           format="HH:mm"
                           style={{ width: "100%" }}
                           onChange={time => handleTimeChange(time, "closing")}
+                          disabled={isLoading}
                         />
                       </div>
                     </div>
                   )}
                 </div>
-
                 <div className="mt-6 flex gap-2 justify-end">
-                  <Button size="large" onClick={() => loadSalonData()}>
+                  <Button size="large" onClick={() => {
+                    queryClient.invalidateQueries({ queryKey: ['user', loginUser?.id] });
+                    queryClient.invalidateQueries({ queryKey: ['timings', loginUser?.id] });
+                  }} disabled={isLoading}>
                     Cancel
                   </Button>
-                  <Button
-                    type="primary"
-                    size="large"
-                    icon={<SaveOutlined />}
-                    onClick={handleSave}
-                  >
+                  <Button type="primary" size="large" icon={<SaveOutlined />} onClick={handleSave} loading={isLoading}>
                     Save All Settings
                   </Button>
                 </div>
@@ -315,5 +275,4 @@ const Settings = () => {
     </div>
   );
 };
-
 export default Settings;

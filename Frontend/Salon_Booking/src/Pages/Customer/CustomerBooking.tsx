@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import { Card, Row, Col, message, Modal, Button } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import { StatCard } from "../../Components/Ui/Cards";
 import { getSalonBookingAPI } from '../../api/generated';
@@ -9,14 +10,9 @@ import { getSalonBookingAPI } from '../../api/generated';
 const { getApiBooking, getApiUser, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
 
 const CustomerBookings: React.FC = () => {
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [staff, setStaff] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
-  const [cancelModalVisible, setCancelModalVisible] = useState(false);
-
+  const [selectedBooking, setSelectedBooking] = React.useState<any>(null);
+  const [cancelModalVisible, setCancelModalVisible] = React.useState(false);
+  const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const loggedInUserId = user?.id || user?._id;
@@ -41,105 +37,82 @@ const CustomerBookings: React.FC = () => {
     return [];
   };
 
-  const fetchCustomers = async () => {
-    try {
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customerBookingsCustomers'],
+    enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiUser(axiosConfig);
       const usersData = extractData(res);
-      const onlyCustomers = usersData.filter((u: any) => u.role === 4);
-      setCustomers(onlyCustomers);
-    } catch {
-      message.error("Failed to load customers");
+      return usersData.filter((u: any) => u.role === 4);
     }
-  };
+  });
 
-  const fetchStaff = async () => {
-    try {
+  const { data: staff = [] } = useQuery({
+    queryKey: ['customerBookingsStaff'],
+    enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiStaff(axiosConfig);
-      const staffData = extractData(res);
-      setStaff(staffData);
-    } catch {
-      message.error("Failed to load staff");
+      return extractData(res);
     }
-  };
+  });
 
-  const fetchServices = async () => {
-    try {
+  const { data: services = [] } = useQuery({
+    queryKey: ['customerBookingsServices'],
+    enabled: !!token,  staleTime: 5000,  refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
-      const servicesData = extractData(res);
-      setServices(servicesData);
-    } catch {
-      message.error("Failed to load services");
+      return extractData(res);
     }
-  };
+  });
 
-  const fetchBookings = async () => {
-    setLoading(true);
-    try {
+  const { data: bookings = [], isLoading,} = useQuery({
+    queryKey: ['customerBookingsList'],
+    enabled: !!token && customers.length > 0 && staff.length > 0 && services.length > 0,staleTime: 5000, refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiBooking(axiosConfig);
       const bookingsData = extractData(res);
 
       const filtered = bookingsData.filter(
         (b: any) => String(b.customerId || b.CustomerId) === String(loggedInUserId)
       );
-
-      const mappedBookings = filtered.map((b: any, index: number) => {
+      return filtered.map((b: any, index: number) => {
         const staffMember = staff.find(
-          (s) => String(s.id || s._id) === String(b.staffId || b.StaffId)
+          (s: any) => String(s.id || s._id) === String(b.staffId || b.StaffId)
         );
         const service = services.find(
-          (s) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
+          (s: any) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
         );
 
         const statusValue = (b.status || b.Status || "").toLowerCase();
-
         return {
           key: b.id || b._id || index,
           id: b.id || b._id,
           salonName: b.salonName || b.SalonName || "Unknown",
           staffName: staffMember?.name || staffMember?.Name || "Unknown",
           serviceName: service?.serviceName || service?.ServiceName || "Unknown",
-          appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format(
-            "DD MMM YYYY - hh:mm A"
-          ),
+          appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY - hh:mm A"),
           amount: b.amount || b.Amount,
           status: statusValue,
         };
       });
-
-      setBookings(mappedBookings);
-    } catch {
-      message.error("Failed to load bookings");
-    } finally {
-      setLoading(false);
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchCustomers();
-    fetchStaff();
-    fetchServices();
-  }, []);
-
-  useEffect(() => {
-    if (customers.length && staff.length && services.length) {
-      fetchBookings();
-    }
-  }, [customers, staff, services]);
-
-  const handleCancelBooking = async () => {
-    if (!selectedBooking) return;
-    
-    try {
-      await putApiBookingId(selectedBooking.id, { status: "cancelled" }, axiosConfig);
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await putApiBookingId(id, { status: "cancelled" }, axiosConfig);
+    },
+    onSuccess: () => {
       message.success("Booking cancelled successfully");
-      fetchBookings();
+      queryClient.invalidateQueries({ queryKey: ['customerBookingsList'] });
       setCancelModalVisible(false);
       setSelectedBooking(null);
-    } catch (error) {
+    },
+    onError: (error: any) => {
       console.error(error);
-      message.error("Failed to cancel booking");
+      message.error(error?.response?.data?.message || "Failed to cancel booking");
     }
-  };
+  });
 
   const showCancelConfirm = (record: any) => {
     if (record.status === "cancelled") {
@@ -154,7 +127,13 @@ const CustomerBookings: React.FC = () => {
     setCancelModalVisible(true);
   };
 
-  const stats = [
+  const handleCancelBooking = () => {
+    if (selectedBooking) {
+      cancelBookingMutation.mutate(selectedBooking.id);
+    }
+  };
+
+  const stats = useMemo(() => [
     {
       title: "Total Bookings",
       value: bookings.length,
@@ -163,32 +142,29 @@ const CustomerBookings: React.FC = () => {
     },
     {
       title: "Completed",
-      value: bookings.filter((b) => b.status === "completed").length,
+      value: bookings.filter((b: any) => b.status === "completed").length,
       icon: <CheckCircleOutlined />,
       color: "#514fff",
     },
     {
       title: "Pending",
-      value: bookings.filter((b) => b.status === "pending").length,
+      value: bookings.filter((b: any) => b.status === "pending").length,
       icon: <ClockCircleOutlined />,
       color: "#37dfba",
     },
     {
       title: "Cancelled",
-      value: bookings.filter((b) => b.status === "cancelled").length,
+      value: bookings.filter((b: any) => b.status === "cancelled").length,
       icon: <CloseCircleOutlined />,
       color: "#ff4d4f",
     },
     {
       title: "Total Spent",
-      value: `$${bookings.reduce(
-        (sum, b) => sum + Number(b.amount || 0),
-        0
-      )}`,
+      value: `$${bookings.reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)}`,
       icon: <CalendarOutlined />,
       color: "#db5800",
     },
-  ];
+  ], [bookings]);
 
   const columns = [
     {
@@ -215,9 +191,7 @@ const CustomerBookings: React.FC = () => {
     {
       title: "Status",
       dataIndex: "status",
-      render: (status: string) => (
-        <StatusBadge type="booking" value={status} />
-      ),
+      render: (status: string) => <StatusBadge type="booking" value={status} />,
     },
     {
       title: "Action",
@@ -236,7 +210,6 @@ const CustomerBookings: React.FC = () => {
       ),
     },
   ];
-
   return (
     <>
       <div className="p-6">
@@ -262,7 +235,7 @@ const CustomerBookings: React.FC = () => {
           <DataTable
             data={bookings}
             columns={columns}
-            loading={loading}
+            loading={isLoading || cancelBookingMutation.isPending}
             showActions={false}
           />
         </Card>
@@ -278,7 +251,7 @@ const CustomerBookings: React.FC = () => {
         }}
         okText="Yes, Cancel"
         cancelText="No, Go Back"
-        okButtonProps={{ danger: true }}
+        okButtonProps={{ danger: true, loading: cancelBookingMutation.isPending }}
       >
         <div className="py-4">
           <p className="text-lg font-semibold mb-2">Are you sure you want to cancel this booking?</p>
@@ -296,5 +269,4 @@ const CustomerBookings: React.FC = () => {
     </>
   );
 };
-
 export default CustomerBookings;

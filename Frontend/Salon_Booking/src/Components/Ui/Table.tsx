@@ -122,11 +122,10 @@ export const DataTable: React.FC<
     onView,
     onEdit,
     onDelete,
-    showActions = true,
+    showActions = true, 
     rowKey = "id",
     tableType = "bookings",
 }) => {
-        // Column Mapping
         const columnMapping: Record<string, string> =
         {
             Customer: "customerName",

@@ -2,21 +2,13 @@ import { TeamOutlined, ScissorOutlined, DollarOutlined } from '@ant-design/icons
 import { useNavigate } from 'react-router-dom';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { StatCard } from '../../Components/Ui/Cards';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, Button, Row, Col } from 'antd';
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
-
 const AdminIndex = () => {
   const navigate = useNavigate();
-
-  const [staffList, setStaffList] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [monthlyData, setMonthlyData] = useState<any[]>([]);
-  
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user?.Role || user?.role;
@@ -33,59 +25,47 @@ const AdminIndex = () => {
   const extractData = (response: any) => {
     if (!response) return [];
     const data = response.data;
-    if (data?.status === true && data?.result) {
-      return data.result;
-    }
-    if (Array.isArray(data)) {
-      return data;
-    }
-    if (data?.result) {
-      return data.result;
-    }
+    if (data?.status === true && data?.result) return data.result;
+    if (Array.isArray(data)) return data;
+    if (data?.result) return data.result;
     return [];
   };
 
-  const fetchStaff = async () => {
-    setLoading(true);
-    try {
+  const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
+    queryKey: ['staff'],
+    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiStaff(axiosConfig);
       let staffData = extractData(res);
       let filteredStaff = Array.isArray(staffData) ? staffData : [];
-
       if (isAdmin && !isSuperAdmin && userSalonName) {
         filteredStaff = filteredStaff.filter((s: any) =>
           (s.salonName || s.SalonName) === userSalonName
         );
       }
-      
-      const normalized = filteredStaff.map((s: any, index: any) => ({
+      return filteredStaff.map((s: any, index: any) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
         name: s.name || s.Name || s.fullName || s.FullName || "N/A",
         role: s.role || s.Role || "Employee",
         status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
       }));
-      setStaffList(normalized);
-    } catch (err) {
-      console.error("Staff error", err);
-    } finally {
-      setLoading(false);
     }
-  };
+  });
 
-  const fetchServices = async () => {
-    try {
+  const { data: services = [], isLoading: servicesLoading } = useQuery({
+    queryKey: ['services'],
+    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       let servicesData = extractData(res);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
-      
       if (isAdmin && !isSuperAdmin && userSalonName) {
         filteredServices = filteredServices.filter((s: any) =>
           (s.salonName || s.SalonName) === userSalonName
         );
       }
-
-      const normalized = filteredServices.map((s: any, index: number) => ({
+      return filteredServices.map((s: any, index: number) => ({
         key: s.id || s._id || index,
         id: s.id || s._id,
         name: s.serviceName || s.ServiceName || s.name || "N/A",
@@ -93,71 +73,56 @@ const AdminIndex = () => {
         price: s.price || s.Price || 0,
         status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
       }));
-      setServices(normalized);
-    } catch (err) {
-      console.error("Service error", err);
     }
-  };
+  });
 
-  const fetchBookings = async () => {
-    try {
+  const { data: bookings = [] } = useQuery({
+    queryKey: ['Bookings'],
+    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    queryFn: async () => {
       const res = await getApiBooking(axiosConfig);
       let bookingsData = extractData(res);
-      
       let filteredBookings = Array.isArray(bookingsData) ? bookingsData : [];
-
       if (isAdmin && !isSuperAdmin && userSalonName) {
         filteredBookings = filteredBookings.filter((b: any) =>
           (b.salonName || b.SalonName) === userSalonName
         );
       }
-
       const mapped = filteredBookings.map((b: any, index: number) => {
         let amount = 0;
-        if (b.amount) amount = parseFloat(b.amount);
-        else if (b.Amount) amount = parseFloat(b.Amount);
-        
+        const status = (b.status || b.Status || "").toLowerCase();
+        if (status !== 'cancelled') {
+          if (b.amount) amount = parseFloat(b.amount);
+          else if (b.Amount) amount = parseFloat(b.Amount);
+        }
         return {
           id: b.id || b._id || index,
           amount: isNaN(amount) ? 0 : amount,
-          date: b.appointmentDate || b.AppointmentDate || b.createdAt || b.CreatedAt || new Date()
+          date: b.appointmentDate || b.AppointmentDate || b.createdAt || b.CreatedAt || new Date(),
+          status: status
         };
       });
-      
-      setBookings(mapped);
-
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const revenueByMonth = new Array(12).fill(0);
-
-      mapped.forEach((booking: any) => {
-        const month = new Date(booking.date).getMonth();
-        revenueByMonth[month] += booking.amount;
-      });
-
-      const chartData = months.map((month, index) => ({
-        month,
-        revenue: revenueByMonth[index],
-        isActive: revenueByMonth[index] > 0
-      }));
-
-      setMonthlyData(chartData);
-    } catch (err) {
-      console.error("Booking error", err);
+      return mapped;
     }
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchStaff();
-      fetchServices();
-      fetchBookings();
-    }
-  }, [token]);
+  });
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
+  const monthlyData = (() => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const revenueByMonth = new Array(12).fill(0);
+    bookings.forEach((booking: any) => {
+      const month = new Date(booking.date).getMonth();
+      revenueByMonth[month] += booking.amount;
+    });
+    return months.map((month, index) => ({
+      month,
+      revenue: revenueByMonth[index],
+      isActive: revenueByMonth[index] > 0
+    }));
+  })();
+
   const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
-
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
     { title: 'Duration (min)', dataIndex: 'duration' },
@@ -172,7 +137,7 @@ const AdminIndex = () => {
       render: (status: string) => <StatusBadge type="user" value={status} />
     }
   ];
-
+  
   const staffColumns = [
     { title: 'Name', dataIndex: 'name' },
     { title: 'Role', dataIndex: 'role' },
@@ -182,7 +147,7 @@ const AdminIndex = () => {
       render: (status: string) => <StatusBadge type="user" value={status} />
     }
   ];
-
+  
   if (!token) {
     return (
       <div className="p-6 text-center">
@@ -192,7 +157,7 @@ const AdminIndex = () => {
       </div>
     );
   }
-
+  
   return (
     <div className="p-6">
       <div>
@@ -200,7 +165,6 @@ const AdminIndex = () => {
         <p className="text-gray-600 mb-6">
           Hello again! Here's what's happening in your salon.
         </p>
-
         <Row gutter={[16, 16]} className="mb-6">
           <Col xs={24} sm={8} md={8}>
             <StatCard
@@ -214,7 +178,7 @@ const AdminIndex = () => {
           <Col xs={24} sm={8} md={8}>
             <StatCard
               title="Active Staff"
-              value={`${staffList.filter(s => s.status === 'active').length}/${staffList.length}`}
+              value={`${staffApiData.filter((s: any) => s.status === 'active').length}/${staffApiData.length}`}
               icon={<TeamOutlined />}
               color="#0400f7"
             />
@@ -291,7 +255,7 @@ const AdminIndex = () => {
               columns={serviceColumns}
               showActions={false}
               rowKey="key"
-              loading={loading}
+              loading={servicesLoading}
             />
           </Card>
 
@@ -304,9 +268,9 @@ const AdminIndex = () => {
             }
           >
             <DataTable
-              data={staffList}
+              data={staffApiData}
               columns={staffColumns}
-              loading={loading}
+              loading={staffLoading}
               showActions={false}
               rowKey="key"
             />
@@ -316,5 +280,4 @@ const AdminIndex = () => {
     </div>
   );
 };
-
 export default AdminIndex;

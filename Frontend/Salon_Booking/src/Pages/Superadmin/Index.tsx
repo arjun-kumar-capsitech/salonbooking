@@ -7,9 +7,7 @@ import { authData } from '../../Redux/Store/Store';
 
 const Index: React.FC = () => {
   const dispatch = useDispatch();
-
   const { user } = useSelector((authData));
-
   useEffect(() => {
     if (user?.role) {
       dispatch(setPermissionsByRole({ role: user.role }));
@@ -17,20 +15,11 @@ const Index: React.FC = () => {
   }, [user, dispatch]);
 
   const superAdminMenuItems = [
-    {
-      key: '/super-admin/deshboard',icon: <LayoutDashboard className='w-5 h-5' />,label: 'Dashboard',
-    },
-    {
-      key: '/super-admin/compani',icon: <Building2 className='w-5 h-5' />,label: 'Companies',
-    },
-    {
-      key: '/super-admin/user',icon: <Users className='w-5 h-5' />,label: 'Users',
-    },
-    {
-      key: '/super-admin/request', icon: <BarChart3 className='w-5 h-5' />, label: 'Request',
-    },
+    {key: '/super-admin/deshboard',icon: <LayoutDashboard className='w-5 h-5' />,label: 'Dashboard', },
+    {key: '/super-admin/compani',icon: <Building2 className='w-5 h-5' />,label: 'Companies', },
+    {key: '/super-admin/user',icon: <Users className='w-5 h-5' />,label: 'Users', },
+    {key: '/super-admin/request', icon: <BarChart3 className='w-5 h-5' />, label: 'Request', },
   ];
-
   return (
     <Deshbord   menuItems={superAdminMenuItems}   appName="Salon Master Control" />
   );

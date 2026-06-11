@@ -1,17 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState,} from "react";
 import { Card, Button, Row, Col, Modal, Steps, DatePicker, TimePicker, Divider, message, Spin, Rate, Tag } from "antd";
 import { ShopOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, EnvironmentOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSalonBookingAPI } from '../../api/generated';
+
 const { Step } = Steps;
 const stepsData = ["Services", "Date & Time", "Staff", "Confirm"];
-const {getApiAdminServices,getApiStaff,getApiUser,getApiTime,postApiBooking} = getSalonBookingAPI();
+const { getApiAdminServices, getApiStaff, getApiUser, getApiTime, postApiBooking } = getSalonBookingAPI();
+
 const CustomerAppointment: React.FC = () => {
-  const [servicesData, setServicesData] = useState<any[]>([]);
-  const [staffData, setStaffData] = useState<any[]>([]);
-  const [salonsData, setSalonsData] = useState<any[]>([]);
-  const [timeSlots, setTimeSlots] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedSalon, setSelectedSalon] = useState<string | null>(null);
   const [selectedSalonName, setSelectedSalonName] = useState<string | null>(null);
   const [step, setStep] = useState(-1);
@@ -22,6 +20,7 @@ const CustomerAppointment: React.FC = () => {
   const [createdBooking, setCreatedBooking] = useState<any>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
+  const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -48,68 +47,96 @@ const CustomerAppointment: React.FC = () => {
   const getRandomRating = () => {
     return (3 + Math.random() * 2).toFixed(1);
   };
-
   const getRandomReviews = () => {
     return Math.floor(Math.random() * 500) + 10;
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [servicesRes, staffRes, usersRes, timeRes] = await Promise.all([
-          getApiAdminServices(axiosConfig),
-          getApiStaff(axiosConfig),
-          getApiUser(axiosConfig),
-          getApiTime(axiosConfig),
-        ]);
+  const { data: servicesApiData = [], isLoading: servicesLoading } = useQuery({
+    queryKey: ['customerServices'],
+    enabled: !!token,staleTime: 5000, refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const res = await getApiAdminServices(axiosConfig);
+      const services = extractData(res);
+      return services.filter((s: any) => s.isActive === true);
+    }
+  });
 
-        const services = extractData(servicesRes);
-        const staff = extractData(staffRes);
-        const users = extractData(usersRes);
-        const times = extractData(timeRes);
+  const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
+    queryKey: ['customerStaff'],
+    enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const res = await getApiStaff(axiosConfig);
+      const staff = extractData(res);
+      return staff.filter((s: any) => s.isActive === true);
+    }
+  });
 
-        const activeServices = services.filter((s: any) => s.isActive === true);
-        const activeStaff = staff.filter((s: any) => s.isActive === true);
+  const { data: timeSlots = [], isLoading: timeLoading } = useQuery({
+    queryKey: ['customerTimeSlots'],
+    enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const res = await getApiTime(axiosConfig);
+      return extractData(res);
+    }
+  });
 
-        setServicesData(activeServices);
-        setStaffData(activeStaff);
-        setTimeSlots(times);
+  const { data: salonsData = [], isLoading: salonsLoading } = useQuery({
+    queryKey: ['customerSalons'],
+    enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const res = await getApiUser(axiosConfig);
+      const users = extractData(res);
+      return users
+        .filter((u: any) => u.role === 2)
+        .map((admin: any) => ({
+          id: admin.id || admin._id,
+          name: admin.salonName || admin.SalonName || admin.fullName,
+          rating: getRandomRating(),
+          reviews: getRandomReviews(),
+          address: admin.salonAddress || admin.SalonAddress || "Address not available",
+          isOpen: true,
+        }))
+        .filter((salon: any) => salon.name);
+    }
+  });
 
-        const salons = users
-          .filter((u: any) => u.role === 2)
-          .map((admin: any) => ({
-            id: admin.id || admin._id,
-            name: admin.salonName || admin.SalonName || admin.fullName,
-            rating: getRandomRating(),
-            reviews: getRandomReviews(),
-            address: admin.salonAddress || admin.SalonAddress || "Address not available",
-            isOpen: true,
-          }))
-          .filter((salon: any) => salon.name);
-
-        setSalonsData(salons);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        message.error("Failed to load data");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  const createBookingMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const response = await postApiBooking(payload, axiosConfig);
+      return extractData(response);
+    },
+    onSuccess: (data) => {
+      setCreatedBooking(data);
+      setShowConfirmation(true);
+      setTimeout(() => {
+        setShowConfirmation(false);
+        setStep(-1);
+        setSelectedSalon(null);
+        setSelectedSalonName(null);
+        setSelectedService(null);
+        setSelectedDate(null);
+        setSelectedTime(null);
+        setSelectedStaff(null);
+        queryClient.invalidateQueries({ queryKey: ['customerBookings'] });
+      }, 4000);
+      message.success("Booking Created Successfully");
+    },
+    onError: (error: any) => {
+      console.error("Booking error:", error);
+      message.error(error?.response?.data?.message || "Booking failed");
+    }
+  });
 
   const getFilteredServices = () => {
-    if (!selectedSalonName) return servicesData;
-    return servicesData.filter((service: any) => 
+    if (!selectedSalonName) return servicesApiData;
+    return servicesApiData.filter((service: any) => 
       (service.salonName || service.SalonName) === selectedSalonName && service.isActive === true
     );
   };
 
   const getFilteredStaff = () => {
-    if (!selectedSalonName) return staffData;
-    return staffData.filter((staff: any) => 
+    if (!selectedSalonName) return staffApiData;
+    return staffApiData.filter((staff: any) => 
       (staff.salonName || staff.SalonName) === selectedSalonName && staff.isActive === true
     );
   };
@@ -117,7 +144,7 @@ const CustomerAppointment: React.FC = () => {
   const disabledDate = (current: any) => {
     if (!current) return true;
     const dayName = current.format("dddd");
-    const dayInfo = timeSlots.find((t) => t.day === dayName);
+    const dayInfo = timeSlots.find((t: any) => t.day === dayName);
     if (!dayInfo || !dayInfo.isOpen) return true;
     return current < dayjs().startOf("day");
   };
@@ -126,7 +153,7 @@ const CustomerAppointment: React.FC = () => {
     if (!selectedDate) return {};
 
     const dayName = selectedDate.format("dddd");
-    const dayInfo = timeSlots.find((t) => t.day === dayName && t.isOpen);
+    const dayInfo = timeSlots.find((t: any) => t.day === dayName && t.isOpen);
 
     if (!dayInfo) return { disabledHours: () => Array.from({ length: 24 }, (_, i) => i) };
 
@@ -155,63 +182,39 @@ const CustomerAppointment: React.FC = () => {
   };
 
   const totalPrice = selectedService?.price || 0;
+  const isLoading = servicesLoading || staffLoading || timeLoading || salonsLoading;
 
   const confirmBooking = async () => {
-    try {
-      if (!selectedService || !selectedStaff || !selectedDate || !selectedTime || !selectedSalon) {
-        message.error("Please complete all steps");
-        return;
-      }
-
-      if (!selectedService.isActive) {
-        message.error("This service is no longer available");
-        return;
-      }
-      if (!selectedStaff.isActive) {
-        message.error("This staff member is no longer available");
-        return;
-      }
-
-      const date = selectedDate.format("YYYY-MM-DD");
-      const time = selectedTime.format("HH:mm");
-      const appointmentDateTime = new Date(`${date} ${time}`).toISOString();
-
-      const payload = {
-        customerId: user?.id || user?._id,
-        serviceId: selectedService.id || selectedService._id,
-        staffId: selectedStaff.id || selectedStaff._id,
-        appointmentDate: appointmentDateTime,
-        salonName: selectedSalonName,
-        amount: selectedService.price,
-        status: "pending",
-      };
-
-      const res = await postApiBooking(payload, axiosConfig);
-      const data = extractData(res);
-      
-      setCreatedBooking(data);
-      setShowConfirmation(true);
-
-      setTimeout(() => {
-        setShowConfirmation(false);
-        setStep(-1);
-        setSelectedSalon(null);
-        setSelectedSalonName(null);
-        setSelectedService(null);
-        setSelectedDate(null);
-        setSelectedTime(null);
-        setSelectedStaff(null);
-      }, 4000);
-
-      message.success("Booking Created Successfully");
-    } catch (error) {
-      console.error("Booking error:", error);
-      message.error("Booking failed");
+    if (!selectedService || !selectedStaff || !selectedDate || !selectedTime || !selectedSalon) {
+      message.error("Please complete all steps");
+      return;
     }
+
+    if (!selectedService.isActive) {
+      message.error("This service is no longer available");
+      return;
+    }
+    if (!selectedStaff.isActive) {
+      message.error("This staff member is no longer available");
+      return;
+    }
+
+    const date = selectedDate.format("YYYY-MM-DD");
+    const time = selectedTime.format("HH:mm");
+    const appointmentDateTime = new Date(`${date} ${time}`).toISOString();
+
+    const payload = {
+      customerId: user?.id || user?._id,
+      serviceId: selectedService.id || selectedService._id,
+      staffId: selectedStaff.id || selectedStaff._id,
+      appointmentDate: appointmentDateTime,
+      salonName: selectedSalonName,
+      amount: selectedService.price,
+      status: "pending",
+    };
+    createBookingMutation.mutate(payload);
   };
-
-  if (loading) return <Spin fullscreen />;
-
+  if (isLoading) return <Spin fullscreen />;
   if (step === -1) {
     return (
       <div className="min-h-screen from-blue-50 to-indigo-100 py-10 px-4">
@@ -221,7 +224,7 @@ const CustomerAppointment: React.FC = () => {
             <p className="text-gray-600 text-lg">Choose from our premium salon partners</p>
           </div>
           <Row gutter={[24, 24]}>
-            {salonsData.map((salon) => (
+            {salonsData.map((salon: any) => (
               <Col xs={24} sm={12} lg={8} key={salon.id}>
                 <Card
                   hoverable
@@ -273,10 +276,10 @@ const CustomerAppointment: React.FC = () => {
                     <div className="text-blue-100 text-sm">Selected Salon</div>
                   </div>
                 </div>
-                {salonsData.find(s => s.name === selectedSalonName) && (
+                {salonsData.find((s: any) => s.name === selectedSalonName) && (
                   <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full">
-                    <Rate disabled defaultValue={parseFloat(salonsData.find(s => s.name === selectedSalonName)?.rating)} allowHalf className="text-yellow-400 text-xs" />
-                    <span className="text-sm font-semibold">{salonsData.find(s => s.name === selectedSalonName)?.rating}</span>
+                    <Rate disabled defaultValue={parseFloat(salonsData.find((s: any) => s.name === selectedSalonName)?.rating)} allowHalf className="text-yellow-400 text-xs" />
+                    <span className="text-sm font-semibold">{salonsData.find((s: any) => s.name === selectedSalonName)?.rating}</span>
                   </div>
                 )}
               </div>
@@ -299,7 +302,7 @@ const CustomerAppointment: React.FC = () => {
                       No active services available for this salon
                     </div>
                   ) : (
-                    filteredServices.map((service) => (
+                    filteredServices.map((service: any) => (
                       <div
                         key={service.id || service._id}
                         onClick={() => setSelectedService(service)}
@@ -362,7 +365,7 @@ const CustomerAppointment: React.FC = () => {
                       No active staff available for this salon
                     </div>
                   ) : (
-                    filteredStaff.map((staff) => (
+                    filteredStaff.map((staff: any) => (
                       <div
                         key={staff.id || staff._id}
                         onClick={() => setSelectedStaff(staff)}
@@ -432,7 +435,7 @@ const CustomerAppointment: React.FC = () => {
               Back
             </Button>
             {step === 3 ? (
-              <Button type="primary" size="large" onClick={confirmBooking} className="bg-blue-600 hover:bg-blue-700">
+              <Button type="primary" size="large" onClick={confirmBooking} loading={createBookingMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
                 Confirm Booking
               </Button>
             ) : (
@@ -486,5 +489,4 @@ const CustomerAppointment: React.FC = () => {
     </div>
   );
 };
-
 export default CustomerAppointment;

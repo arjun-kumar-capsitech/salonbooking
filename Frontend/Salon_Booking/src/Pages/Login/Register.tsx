@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const {postApiUserRegisterCustomer,postApiUserRegisterAdmin} = getSalonBookingAPI();
-
+const { postApiUserRegisterCustomer, postApiUserRegisterAdmin } = getSalonBookingAPI();
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -12,19 +12,9 @@ function Register() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phoneNo: "",
-    salonName: "",
-    salonAddress: "",
-    password: "",
-    confirmPassword: ""
-  });
-
+  const [formData, setFormData] = useState({ fullName: "", email: "", phoneNo: "",salonName: "", salonAddress: "", password: "",confirmPassword: ""});
+  
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "fullName":
@@ -70,14 +60,53 @@ function Register() {
   const getFieldError = (field: string) => {
     return submitted ? validateField(field, formData[field as keyof typeof formData]) : "";
   };
-
   const isFormValid = () => {
-    const fields = userType === "Admin" 
+    const fields = userType === "Admin"
       ? ["fullName", "email", "phoneNo", "salonName", "salonAddress", "password", "confirmPassword"]
       : ["fullName", "email", "phoneNo", "password", "confirmPassword"];
-    
+
     return fields.every(field => !validateField(field, formData[field as keyof typeof formData]));
   };
+
+  const customerRegisterMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await postApiUserRegisterCustomer(data);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data.status === true) {
+        setSuccess(data.message || "Registration successful!");
+        setTimeout(() => navigate("/login"), 1500);
+      } else {
+        setError(data.message || "Registration failed");
+      }
+    },
+    onError: (err: any) => {
+      console.error("Registration error:", err);
+      const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
+      setError(errorMessage);
+    }
+  });
+
+  const adminRegisterMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const response = await postApiUserRegisterAdmin(data);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      if (data.status === true) {
+        setSuccess(data.message || "Registration successful!");
+        setTimeout(() => navigate("/login"), 1500);
+      } else {
+        setError(data.message || "Registration failed");
+      }
+    },
+    onError: (err: any) => {
+      console.error("Registration error:", err);
+      const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
+      setError(errorMessage);
+    }
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,47 +115,28 @@ function Register() {
     setSuccess("");
 
     if (!isFormValid()) return;
-    setLoading(true);
 
-    try {
-      let response;
-      
-      if (userType === "Customer") {
-        response = await postApiUserRegisterCustomer({
-          fullName: formData.fullName,
-          email: formData.email,
-          phoneNumber: formData.phoneNo,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword,
-        });
-      } else {
-        response = await postApiUserRegisterAdmin({
-          fullName: formData.fullName,
-          email: formData.email,
-          phoneNumber: formData.phoneNo,
-          salonName: formData.salonName,
-          salonAddress: formData.salonAddress,
-          password: formData.password,
-          confirmPassword: formData.confirmPassword,
-        });
-      }
-
-      const data = response.data;
-
-      if (data.status === true) {
-        setSuccess(data.message || "Registration successful!");
-        setTimeout(() => navigate("/login"), 1500);
-      } else {
-        setError(data.message || "Registration failed");
-      }
-    } catch (err: any) {
-      console.error("Registration error:", err);
-      const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+    if (userType === "Customer") {
+      customerRegisterMutation.mutate({
+        fullName: formData.fullName,
+        email: formData.email,
+        phoneNumber: formData.phoneNo,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+      });
+    } else {
+      adminRegisterMutation.mutate({
+        fullName: formData.fullName,
+        email: formData.email,
+        phoneNumber: formData.phoneNo,
+        salonName: formData.salonName,
+        salonAddress: formData.salonAddress,
+        password: formData.password,
+        confirmPassword: formData.confirmPassword,
+      });
     }
   };
+  const isLoading = customerRegisterMutation.isPending || adminRegisterMutation.isPending;
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 px-4 py-8">
@@ -156,6 +166,7 @@ function Register() {
                 ? "border-blue-600 text-blue-600 bg-blue-50"
                 : "border-gray-300 text-gray-500 hover:border-gray-400"
             }`}
+            disabled={isLoading}
           >
             Barber Shop
           </button>
@@ -167,6 +178,7 @@ function Register() {
                 ? "border-blue-600 text-blue-600 bg-blue-50"
                 : "border-gray-300 text-gray-500 hover:border-gray-400"
             }`}
+            disabled={isLoading}
           >
             Customer
           </button>
@@ -183,7 +195,7 @@ function Register() {
               className={`w-full px-4 py-3 border rounded-lg ${
                 getFieldError("fullName") ? "border-red-500" : "border-gray-300"
               }`}
-              disabled={loading}
+              disabled={isLoading}
             />
             {getFieldError("fullName") && <p className="text-red-500 text-sm mt-1">{getFieldError("fullName")}</p>}
           </div>
@@ -198,7 +210,7 @@ function Register() {
               className={`w-full px-4 py-3 border rounded-lg ${
                 getFieldError("email") ? "border-red-500" : "border-gray-300"
               }`}
-              disabled={loading}
+              disabled={isLoading}
             />
             {getFieldError("email") && <p className="text-red-500 text-sm mt-1">{getFieldError("email")}</p>}
           </div>
@@ -213,7 +225,7 @@ function Register() {
               className={`w-full px-4 py-3 border rounded-lg ${
                 getFieldError("phoneNo") ? "border-red-500" : "border-gray-300"
               }`}
-              disabled={loading}
+              disabled={isLoading}
             />
             {getFieldError("phoneNo") && <p className="text-red-500 text-sm mt-1">{getFieldError("phoneNo")}</p>}
           </div>
@@ -230,7 +242,7 @@ function Register() {
                   className={`w-full px-4 py-3 border rounded-lg ${
                     getFieldError("salonName") ? "border-red-500" : "border-gray-300"
                   }`}
-                  disabled={loading}
+                  disabled={isLoading}
                 />
                 {getFieldError("salonName") && <p className="text-red-500 text-sm mt-1">{getFieldError("salonName")}</p>}
               </div>
@@ -243,7 +255,7 @@ function Register() {
                   className={`w-full px-4 py-3 border rounded-lg resize-none ${
                     getFieldError("salonAddress") ? "border-red-500" : "border-gray-300"
                   }`}
-                  disabled={loading}
+                  disabled={isLoading}
                 />
                 {getFieldError("salonAddress") && <p className="text-red-500 text-sm mt-1">{getFieldError("salonAddress")}</p>}
               </div>
@@ -261,13 +273,13 @@ function Register() {
                 className={`w-full px-4 py-3 border rounded-lg pr-12 ${
                   getFieldError("password") ? "border-red-500" : "border-gray-300"
                 }`}
-                disabled={loading}
+                disabled={isLoading}
               />
               <button
                 type="button"
                 className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
+                disabled={isLoading}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -286,13 +298,13 @@ function Register() {
                 className={`w-full px-4 py-3 border rounded-lg pr-12 ${
                   getFieldError("confirmPassword") ? "border-red-500" : "border-gray-300"
                 }`}
-                disabled={loading}
+                disabled={isLoading}
               />
               <button
                 type="button"
                 className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                disabled={loading}
+                disabled={isLoading}
               >
                 {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -303,9 +315,9 @@ function Register() {
           <button
             type="submit"
             className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-medium hover:bg-blue-700 transition-colors mt-4 disabled:opacity-50"
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? "Registering..." : "Sign Up"}
+            {isLoading ? "Registering..." : "Sign Up"}
           </button>
 
           <p className="text-center text-gray-600 text-sm mt-6">

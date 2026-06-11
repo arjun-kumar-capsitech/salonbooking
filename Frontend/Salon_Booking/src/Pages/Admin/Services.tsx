@@ -1,23 +1,26 @@
-import { Card, Button, Input, Form, message } from 'antd';
+import { Card, Button, Input, Select, Form, message } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { DataTable } from '../../Components/Ui/Table';
+import { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import { getSalonBookingAPI } from '../../api/generated';
-const { getApiAdminServices,putApiAdminServicesId,postApiAdminServices,deleteApiAdminServicesId}= getSalonBookingAPI();
 
+const { Option } = Select;
+const { getApiAdminServices, putApiAdminServicesId, postApiAdminServices, deleteApiAdminServicesId } = getSalonBookingAPI();
 const Service = () => {
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [form] = Form.useForm();
-  const [services, setServices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [submitted, setSubmitted] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({ serviceName: '', price: '', duration: '' });
 
-
-  const token = localStorage.getItem("authToken");
+  const queryClient = useQueryClient();
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user?.Role || user?.role;
   const userSalonName = user?.SalonName || user?.salonName;
@@ -26,12 +29,6 @@ const Service = () => {
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
 
-  const axiosConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
   const extractData = (response: any) => {
     if (!response) return [];
     const data = response.data;
@@ -41,21 +38,43 @@ const Service = () => {
     return [];
   };
 
-  const fetchServices = async () => {
-    setLoading(true);
-    try {
+  const validateField = (name: string, value: any, _isEdit: boolean = false) => {
+    switch (name) {
+      case "serviceName":
+        if (!value?.trim()) return "Service name is required";
+        if (value.trim().length < 2) return "Service name must be at least 2 characters";
+        if (value.trim().length > 100) return "Service name must be less than 100 characters"; return "";
+      case "price":
+        if (!value && value !== 0) return "Price is required";
+        if (isNaN(Number(value))) return "Price must be a number";
+        if (Number(value) <= 0) return "Price must be greater than 0"; return "";
+      case "duration":
+        if (!value && value !== 0) return "Duration is required";
+        if (isNaN(Number(value))) return "Duration must be a number";
+        if (Number(value) <= 0) return "Duration must be greater than 0"; return "";default:return "";
+    }
+  };
+
+  const resetModal = () => {
+    setModalVisible(false);
+    setEditingService(null);
+    form.resetFields();
+    setSubmitted(false);
+    setFieldErrors({ serviceName: '', price: '', duration: '' });
+  };
+
+  const { data: services = [], isLoading: loading } = useQuery({
+    queryKey: ['service'], staleTime: 5000, refetchOnWindowFocus: false, refetchOnMount: false,
+    queryFn: async () => {
       const response = await getApiAdminServices();
       let servicesData = extractData(response);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
-
       if (isCustomer) {
         filteredServices = filteredServices.filter((s: any) => s.isActive === true);
-      } else if (isAdmin && !isSuperAdmin) {
-        if (userSalonName) {
-          filteredServices = filteredServices.filter((s: any) =>
-            (s.salonName || s.SalonName) === userSalonName
-          );
-        }
+      } else if (isAdmin && !isSuperAdmin && userSalonName) {
+        filteredServices = filteredServices.filter((s: any) =>
+          (s.salonName || s.SalonName) === userSalonName
+        );
       }
 
       const normalized = filteredServices.map((s: any, index: number) => ({
@@ -67,21 +86,83 @@ const Service = () => {
         status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive',
         salonName: s.salonName || s.SalonName || 'All'
       }));
+      return normalized;
+    },
+  });
 
-      setServices(normalized);
-    } catch (error: any) {
-      console.error('Error fetching services:', error);
-      message.error(error.response?.data?.message || 'Failed to load services');
-    } finally {
-      setLoading(false);
-    }
+  const addServiceMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const response = await postApiAdminServices(payload);
+      return extractData(response);
+    },
+    onSuccess: () => {
+      message.success('Service added successfully');
+      queryClient.invalidateQueries({ queryKey: ['service'] });
+      resetModal();
+    },
+    onError: (error: any) => {
+      const backendMessage = error?.response?.data?.message || '';
+      if (backendMessage.toLowerCase().includes('exist')) {
+        setFieldErrors(prev => ({ ...prev, serviceName: 'Service name already exists' }));
+      } else {
+        message.error(backendMessage || 'Something went wrong');
+      }
+    },
+  });
+
+  const updateServiceMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
+      await putApiAdminServicesId(id, payload);
+    },
+    onSuccess: () => {
+      message.success('Service updated successfully');
+      queryClient.invalidateQueries({ queryKey: ['service'] });
+      resetModal();
+    },
+    onError: (error: any) => {
+      const backendMessage = error?.response?.data?.message || '';
+      if (backendMessage.toLowerCase().includes('exist')) {
+        setFieldErrors(prev => ({ ...prev, serviceName: 'Service name already exists' }));
+      } else {
+        message.error(backendMessage || 'Something went wrong');
+      }
+    },
+  });
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await deleteApiAdminServicesId(id);
+    },
+    onSuccess: () => {
+      message.success('Service deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['service'] });
+    },
+    onError: (error: any) => {
+      message.error(error?.response?.data?.message || 'Failed to delete service');
+    },
+  });
+
+  const getFieldError = (field: string) => {
+    return submitted ? fieldErrors[field as keyof typeof fieldErrors] : "";
   };
 
-  useEffect(() => {
-    fetchServices();
-  }, []);
+  const handleFormSubmit = (values: any) => {
+    setSubmitted(true);
 
-  const handleFormSubmit = async (values: any) => {
+    const nameError = validateField("serviceName", values.serviceName, !!editingService);
+    const priceError = validateField("price", values.price, !!editingService);
+    const durationError = validateField("duration", values.duration, !!editingService);
+
+    setFieldErrors({
+      serviceName: nameError,
+      price: priceError,
+      duration: durationError
+    });
+
+    if (nameError || priceError || durationError) {
+      return;
+    }
+
     const payload = {
       serviceName: values.serviceName,
       duration: Number(values.duration),
@@ -90,80 +171,35 @@ const Service = () => {
       salonName: isSuperAdmin ? values.salonName : userSalonName
     };
 
-    try {
-      if (editingService) {
-        await putApiAdminServicesId(editingService.id,payload);
-        message.success('Service updated successfully');
-      } else {
-        await postApiAdminServices(payload, axiosConfig);
-        message.success('Service added successfully');
-      }
-      await fetchServices();
-      setModalVisible(false);
-      setEditingService(null);
-      form.resetFields();
-    } catch (error: any) {
-      console.error('Error saving service:', error);
-      message.error(error.response?.data?.message || error.response?.data || 'Something went wrong');
+    if (editingService) {
+      updateServiceMutation.mutate({ id: editingService.id, payload });
+    } else {
+      addServiceMutation.mutate(payload);
     }
   };
 
-  const handleDelete = async (record: any) => {
-    if (isCustomer) {
-      message.error('You are not authorized to delete services');
-      return;
-    }
-
-    try {
-      await deleteApiAdminServicesId(record.id);
-      message.success('Service deleted successfully');
-      await fetchServices();
-    } catch (error: any) {
-      console.error('Error deleting service:', error);
-      message.error(error.response?.data?.message || 'Failed to delete service');
-    }
+  const handleDelete = (record: any) => {
+    if (isCustomer || !record.id) return;
+    deleteServiceMutation.mutate(record.id);
   };
+  const filteredServices = useMemo(() => {
+    return services.filter((s: any) =>
+      (s.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (statusFilter === 'all' || s.status === statusFilter)
+    );
+  }, [services, searchTerm, statusFilter]);
 
-  const filteredServices = services.filter((s) =>
-    (s.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
   const columns = [
+    { title: 'Service Name', dataIndex: 'serviceName' },
+    { title: 'Duration (mins)', dataIndex: 'duration' },
+    { title: 'Price', dataIndex: 'price', render: (price: number) => `$${price}` },
+    ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
     {
-      title: "Service Name",
-      dataIndex: "serviceName",
-      key: "serviceName",
-    },
-    {
-      title: "Duration (mins)",
-      dataIndex: "duration",
-      key: "duration",
-    },
-    {
-      title: "Price",
-      dataIndex: "price",
-      key: "price",
-      render: (price: number) => `$${price}`,
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      render: (status: string) => (
-        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${status === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
-          }`}>
-          {status?.toUpperCase()}
-        </span>
-      ),
-    },
+      title: 'Status',
+      dataIndex: 'status',
+      render: (status: string) => <StatusBadge value={status} type={'user'} />
+    }
   ];
-
-  if (isAdmin || isSuperAdmin) {
-    columns.splice(1, 0, {
-      title: "Salon Name",
-      dataIndex: "salonName",
-      key: "salonName",
-    });
-  }
 
   return (
     <div className="p-6">
@@ -176,7 +212,6 @@ const Service = () => {
             {isCustomer ? "Browse our services" : "Manage salon services"}
           </p>
         </div>
-
         {!isCustomer && (
           <Button
             type="primary"
@@ -184,7 +219,8 @@ const Service = () => {
             onClick={() => {
               setEditingService(null);
               form.resetFields();
-              // Set default values
+              setSubmitted(false);
+              setFieldErrors({ serviceName: '', price: '', duration: '' });
               form.setFieldsValue({ status: 'active' });
               setModalVisible(true);
             }}
@@ -193,28 +229,35 @@ const Service = () => {
           </Button>
         )}
       </div>
-
       <Card className="mb-6">
-        <Input
-          placeholder="Search service..."
-          prefix={<SearchOutlined />}
-          style={{ width: 300 }}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          allowClear
-        />
-      </Card>
-
-      <Card>
-        <div className="p-2 mb-4">
-          <p className="text-gray-700 font-medium">
-            {isCustomer ? "Available Services Data" : "All Services Data"}
-          </p>
+        <div className="flex gap-4">
+          <Input
+            placeholder="Search service..."
+            prefix={<SearchOutlined />}
+            style={{ width: 300 }}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            allowClear
+          />
+          <Select
+            style={{ width: 120 }}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          >
+            <Option value="all">All Status</Option>
+            <Option value="active">Active</Option>
+            <Option value="inactive">Inactive</Option>
+          </Select>
         </div>
+      </Card>
+      <Card>
+        <p className="p-2 mb-4">
+          {isCustomer ? "Available Services Data" : "All Services Data"}
+        </p>
         <DataTable
           data={filteredServices}
-          tableType="services"
-          loading={loading}
+          columns={columns}
+          loading={loading || addServiceMutation.isPending || updateServiceMutation.isPending || deleteServiceMutation.isPending}
           onEdit={!isCustomer ? (record) => {
             setEditingService(record);
             form.setFieldsValue({
@@ -224,74 +267,86 @@ const Service = () => {
               status: record.status,
               ...(isSuperAdmin && { salonName: record.salonName })
             });
+            setSubmitted(false);
+            setFieldErrors({ serviceName: '', price: '', duration: '' });
             setModalVisible(true);
           } : undefined}
           onDelete={!isCustomer ? handleDelete : undefined}
           showActions={!isCustomer}
+          rowKey="key"
         />
       </Card>
-
       {!isCustomer && (
         <ModalForm
           form={form}
           open={modalVisible}
-          onClose={() => {
-            setModalVisible(false);
-            setEditingService(null);
-            form.resetFields();
-          }}
-          title={
-            <div className="flex items-center gap-2">
-              <Scissors size={20} />
-              {editingService ? 'Edit Service' : 'Add Service'}
-            </div>
-          }
+          onClose={resetModal}
+          title={<div className="flex items-center gap-2"><Scissors size={20} />{editingService ? 'Edit Service' : 'Add Service'}</div>}
           initialValues={editingService || { status: 'active' }}
           onSubmit={handleFormSubmit}
           submitText={editingService ? 'Update Service' : 'Add Service'}
+          loading={addServiceMutation.isPending || updateServiceMutation.isPending}
         >
-          <InputField 
-            label="Service Name" 
-            name="serviceName" 
-            required={true}
-            placeholder="Enter service name"
-          />
-          <InputField
-            label="Duration (minutes)"
-            name="duration"
-            type="number"
-            required={true}
-            placeholder="Enter duration in minutes"
-          />
-          <InputField 
-            label="Price" 
-            name="price" 
-            type="number" 
-            required={true}
-            placeholder="Enter price"
-            prefix="$"
-          />
-          {isSuperAdmin && (
+          <div className="mb-4">
             <InputField
-              label="Salon Name"
-              name="salonName"
-              required={true}
-              placeholder="Enter salon name"
+              label="Service Name"
+              name="serviceName"
+              required
+              placeholder="Enter service name"
             />
+            {getFieldError("serviceName") && (
+              <p className="text-red-500 text-sm mt-1">{getFieldError("serviceName")}</p>
+            )}
+          </div>
+          <div className="mb-4">
+            <InputField
+              label="Duration (minutes)"
+              name="duration"
+              type="number"
+              required
+              placeholder="Enter duration in minutes"
+            />
+            {getFieldError("duration") && (
+              <p className="text-red-500 text-sm mt-1">{getFieldError("duration")}</p>
+            )}
+          </div>
+          <div className="mb-4">
+            <InputField
+              label="Price"
+              name="price"
+              type="number"
+              required
+              placeholder="Enter price"
+              prefix="$"
+            />
+            {getFieldError("price") && (
+              <p className="text-red-500 text-sm mt-1">{getFieldError("price")}</p>
+            )}
+          </div>
+          {isSuperAdmin && (
+            <div className="mb-4">
+              <InputField
+                label="Salon Name"
+                name="salonName"
+                required
+                placeholder="Enter salon name"
+              />
+            </div>
           )}
-          <SelectField
-            label="Status"
-            name="status"
-            required={true}
-            options={[
-              { value: 'active', label: 'Active' },
-              { value: 'inactive', label: 'Inactive' }
-            ]}
-          />
+          <div className="mb-2">
+            <SelectField
+              label="Status"
+              name="status"
+              required
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' }
+              ]}
+            />
+          </div>
         </ModalForm>
       )}
     </div>
   );
 };
-
 export default Service;

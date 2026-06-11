@@ -15,14 +15,9 @@ const EmployeeIndex: React.FC = () => {
   }, [user, dispatch]);
 
   const menuItems = [
-    {
-      key: "/customer/booking",icon: <Calendar className="w-5 h-5" />,label: "My Bookings",
-    },
-    {
-        key: "/customer/appointment",icon: <Calendar className="w-5 h-5" />,label: "Book Appointment",
-    },
+    {key: "/customer/booking",icon: <Calendar className="w-5 h-5" />,label: "My Bookings",},
+    {key: "/customer/appointment",icon: <Calendar className="w-5 h-5" />,label: "Book Appointment",},
   ];
-
   return (
     <Deshbord
       menuItems={menuItems}
@@ -30,5 +25,4 @@ const EmployeeIndex: React.FC = () => {
     />
   );
 };
-
 export default EmployeeIndex;

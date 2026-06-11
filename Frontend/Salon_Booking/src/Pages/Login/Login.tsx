@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useNavigate, } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
+import { useMutation } from "@tanstack/react-query";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
 import { getSalonBookingAPI } from "../../api/generated";
 
@@ -11,7 +12,6 @@ function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -29,63 +29,45 @@ function Login() {
     }
     return "";
   };
-
   const isFormValid = () => {
     const emailError = validateField("email", formData.email);
     const passwordError = validateField("password", formData.password);
     return !emailError && !passwordError;
   };
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (submitted) setError("");
   };
-
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    setSubmitted(true);
-    setError("");
-
-    if (!isFormValid()) return;
-    setLoading(true);
-
-    try {
+  const loginMutation = useMutation({
+    mutationFn: async (data: any) => {
       const response = await postApiUserLogin({
-        email: formData.email,
-        password: formData.password,
+        email: data.email,
+        password: data.password,
       });
-
-      const data = response.data;
-
+      return response.data;
+    },
+    onSuccess: (data) => {
       if (!data.status) {
         setError(data.message || "Login failed");
-        setLoading(false);
         return;
       }
-
       const result = data.result as { user: any; token: string };
-      
       if (!result?.user) {
         setError("Invalid response from server");
-        setLoading(false);
         return;
       }
-
+      
       const user = result.user;
       const token = result.token;
-
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
-        setLoading(false);
         return;
       }
 
       dispatch(setLogin({ user, token }));
-
       const redirectPath = localStorage.getItem("redirectAfterLogin");
-      
       localStorage.removeItem("redirectAfterLogin");
 
       const roleRoutes: Record<number, string> = {
@@ -100,17 +82,28 @@ function Login() {
       } else {
         navigate(roleRoutes[user.role] || "/");
       }
-
-    } catch (err) {
+    },
+    onError: (err: any) => {
       console.error("Login error:", err);
       setError("Server error. Please try again.");
-    } finally {
-      setLoading(false);
     }
+  });
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    setSubmitted(true);
+    setError("");
+
+    if (!isFormValid()) return;
+    loginMutation.mutate({
+      email: formData.email,
+      password: formData.password,
+    });
   };
 
   const emailError = submitted ? validateField("email", formData.email) : "";
   const passwordError = submitted ? validateField("password", formData.password) : "";
+  const isLoading = loginMutation.isPending;
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 px-4">
@@ -135,7 +128,7 @@ function Login() {
               className={`w-full px-4 py-3 border rounded-lg ${
                 emailError ? "border-red-500" : "border-gray-300"
               }`}
-              disabled={loading}
+              disabled={isLoading}
             />
             {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
           </div>
@@ -151,13 +144,13 @@ function Login() {
                 className={`w-full px-4 py-3 border rounded-lg pr-12 ${
                   passwordError ? "border-red-500" : "border-gray-300"
                 }`}
-                disabled={loading}
+                disabled={isLoading}
               />
               <button
                 type="button"
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
                 onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
+                disabled={isLoading}
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
@@ -168,9 +161,9 @@ function Login() {
           <button
             type="submit"
             className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-            disabled={loading}
+            disabled={isLoading}
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {isLoading ? "Signing in..." : "Sign in"}
           </button>
 
           <p className="text-center text-gray-600 text-sm mt-6">
@@ -184,5 +177,4 @@ function Login() {
     </div>
   );
 }
-
 export default Login;
