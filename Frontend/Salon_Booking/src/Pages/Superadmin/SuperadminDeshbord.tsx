@@ -8,8 +8,7 @@ import { StatCard } from '../../Components/Ui/Cards'
 import { getSalonBookingAPI } from '../../api/generated'
 
 const { Title, Text } = Typography
-const { getApiUser, getApiBooking } = getSalonBookingAPI()
-
+const { getAllUsers: getApiUser, getAllBooking: getApiBooking } = getSalonBookingAPI()
 const SuperAdminDashboard = () => {
   const navigate = useNavigate()
   const token = localStorage.getItem("authToken")
@@ -17,35 +16,73 @@ const SuperAdminDashboard = () => {
   const axiosConfig = {
     headers: { Authorization: `Bearer ${token}` }
   }
-
-  const extractData = (response: any) => {
-    if (!response || !response.data) return []
-    if (response.data?.status === true && response.data?.result) return response.data.result
-    if (response.data?.result) return response.data.result
-    if (Array.isArray(response.data)) return response.data
-    return []
+  const ResponseData = (response: any) => {
+    if (!response) return null
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data)
+      } catch {
+        return null
+      }
+    }
+    return response.data
   }
 
   const { data: usersData = [], isLoading: usersLoading } = useQuery({
-    queryKey: ['superAdminUsers'],
-    enabled: !!token,  staleTime: 5000,  refetchOnWindowFocus: false,
+    queryKey: ['superAdminUsers'],enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await getApiUser(axiosConfig)
-      return extractData(res)
+      const res = await getApiUser({ page: 1, pageSize: 100 }, axiosConfig)
+      const parsedData = ResponseData(res)
+      if (!parsedData?.status || !parsedData?.result) {
+        return []
+      }
+      let rawUsers = []
+      const result = parsedData.result
+      
+      if (Array.isArray(result)) {
+        rawUsers = result
+      } else if (result?.data && Array.isArray(result.data)) {
+        rawUsers = result.data
+      } else {
+        rawUsers = []
+      }
+
+      return rawUsers
     }
   })
 
   const { data: bookingsData = [] } = useQuery({
     queryKey: ['superAdminBookings'],
-    enabled: !!token,  staleTime: 5000,  refetchOnWindowFocus: false,
+    enabled: !!token,
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await getApiBooking(axiosConfig)
-      return extractData(res)
+      const res = await getApiBooking(undefined, axiosConfig)
+      const parsedData = ResponseData(res)
+      
+      if (!parsedData?.status || !parsedData?.result) {
+        return []
+      }
+      let rawBookings = []
+      const result = parsedData.result
+      
+      if (Array.isArray(result)) {
+        rawBookings = result
+      } else if (result?.data && Array.isArray(result.data)) {
+        rawBookings = result.data
+      } else {
+        rawBookings = []
+      }
+
+      return rawBookings
     }
   })
 
   const companies = useMemo(() => {
-    const admins = usersData.filter((u: any) => u.role === 2)
+    const admins = usersData.filter((u: any) => {
+      const role = u.role || u.Role
+      return role === 2
+    })
     return admins.map((u: any, index: number) => ({
       id: u.id || u._id || index,
       salonName: u.salonName || u.SalonName || "N/A",
@@ -57,7 +94,17 @@ const SuperAdminDashboard = () => {
   }, [usersData])
 
   const customers = useMemo(() => {
-    return usersData.filter((u: any) => u.role === 4)
+    return usersData.filter((u: any) => {
+      const role = u.role || u.Role
+      return role === 4
+    })
+  }, [usersData])
+
+  const employees = useMemo(() => {
+    return usersData.filter((u: any) => {
+      const role = u.role || u.Role
+      return role === 3
+    })
   }, [usersData])
 
   const totalRevenue = useMemo(() => {
@@ -65,7 +112,7 @@ const SuperAdminDashboard = () => {
     bookingsData.forEach((booking: any) => {
       const status = (booking.status || booking.Status || "").toLowerCase()
       if (status === 'completed' || status === 'confirmed') {
-        const amount = parseFloat(booking.amount || booking.Amount || 0)
+        const amount = parseFloat(booking.amount || booking.Amount || booking.totalAmount || booking.TotalAmount || 0)
         total += isNaN(amount) ? 0 : amount
       }
     })
@@ -79,11 +126,15 @@ const SuperAdminDashboard = () => {
     bookingsData.forEach((booking: any) => {
       const status = (booking.status || booking.Status || "").toLowerCase()
       if (status === 'completed' || status === 'confirmed') {
-        const amount = parseFloat(booking.amount || booking.Amount || 0)
+        const amount = parseFloat(booking.amount || booking.Amount || booking.totalAmount || booking.TotalAmount || 0)
         if (!isNaN(amount)) {
-          const bookingDate = booking.appointmentDate || booking.AppointmentDate || booking.createdAt || booking.CreatedAt
-          const month = new Date(bookingDate).getMonth()
-          revenueByMonth[month] += amount
+          const bookingDate = booking.appointmentDate || booking.AppointmentDate || booking.createdAt || booking.CreatedAt || booking.date || booking.Date
+          if (bookingDate) {
+            const month = new Date(bookingDate).getMonth()
+            if (!isNaN(month)) {
+              revenueByMonth[month] += amount
+            }
+          }
         }
       }
     })
@@ -100,8 +151,9 @@ const SuperAdminDashboard = () => {
 
   const stats = [
     { title: 'Total Companies', value: companies.length, icon: <ShopOutlined />, color: '#000000' },
-    { title: 'Total Customers', value: customers.length, icon: <TeamOutlined />, color: '#0400f7' },
-    { title: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, icon: <DollarOutlined />, color: '#ff7b00' }
+    { title: 'Total Employees', value: employees.length, icon: <TeamOutlined />, color: '#0400f7' },
+    { title: 'Total Customers', value: customers.length, icon: <TeamOutlined />, color: '#ff7b00' },
+    { title: 'Total Revenue', value: `$${totalRevenue.toLocaleString()}`, icon: <DollarOutlined />, color: '#52c41a' }
   ]
 
   const companyColumns = [
@@ -139,6 +191,18 @@ const SuperAdminDashboard = () => {
           <span>{text || "N/A"}</span>
         </div>
       )
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      render: (status: string) => (
+        <span style={{ 
+          color: status === 'active' ? '#52c41a' : '#ff4d4f',
+          fontWeight: 500
+        }}>
+          {status === 'active' ? 'Active' : 'Inactive'}
+        </span>
+      )
     }
   ]
 
@@ -159,7 +223,7 @@ const SuperAdminDashboard = () => {
 
       <Row gutter={[24, 24]} className="mb-8">
         {stats.map((stat, index) => (
-          <Col xs={24} sm={12} md={8} key={index}>
+          <Col xs={24} sm={12} md={6} key={index}>
             <StatCard title={stat.title} value={stat.value} icon={stat.icon} color={stat.color} />
           </Col>
         ))}

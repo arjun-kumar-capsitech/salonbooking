@@ -3,15 +3,16 @@ import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getSalonBookingAPI } from '../../api/generated';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
-import { getSalonBookingAPI } from '../../api/generated';
 
 const { Option } = Select;
-const { getApiAdminServices, putApiAdminServicesId, postApiAdminServices, deleteApiAdminServicesId } = getSalonBookingAPI();
+
+const {getAllServices,createService,updateService,deleteService} = getSalonBookingAPI();
+
 const Service = () => {
-  
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [form] = Form.useForm();
@@ -19,39 +20,64 @@ const Service = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [submitted, setSubmitted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ serviceName: '', price: '', duration: '' });
-
-  const queryClient = useQueryClient();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const userRole = user?.Role || user?.role;
-  const userSalonName = user?.SalonName || user?.salonName;
+  const queryClient = useQueryClient();  
+  const userStr = localStorage.getItem("user");
+  const user = userStr ? JSON.parse(userStr) : {};
+  const userRole = user?.role || user?.Role;
+  const userSalonName = user?.salonName || user?.SalonName;
 
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
-  const isSuperAdmin = userRole === "SuperAdmin";
+  const isSuperAdmin = userRole === "SuperAdmin" || userRole === 1;
   const isCustomer = userRole === "Customer" || userRole === 4;
+
+  const token = localStorage.getItem("authToken");
+  
+  const axiosConfig = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+
+  const ResponseData = (response: any) => {
+    if (!response) return null;
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data);
+      } catch {
+        return null;
+      }
+    }
+    return response.data;
+  };
 
   const extractData = (response: any) => {
     if (!response) return [];
-    const data = response.data;
-    if (data?.status === true && data?.result) return data.result;
-    if (data?.result) return data.result;
-    if (Array.isArray(data)) return data;
+    const parsedData = ResponseData(response);
+    if (parsedData?.status === true && parsedData?.result) {
+      return Array.isArray(parsedData.result) ? parsedData.result : [parsedData.result];
+    }
     return [];
   };
 
-  const validateField = (name: string, value: any, _isEdit: boolean = false) => {
+  const validateField = (name: string, value: any) => {
     switch (name) {
       case "serviceName":
         if (!value?.trim()) return "Service name is required";
         if (value.trim().length < 2) return "Service name must be at least 2 characters";
-        if (value.trim().length > 100) return "Service name must be less than 100 characters"; return "";
+        if (value.trim().length > 100) return "Service name must be less than 100 characters";
+        return "";
       case "price":
         if (!value && value !== 0) return "Price is required";
         if (isNaN(Number(value))) return "Price must be a number";
-        if (Number(value) <= 0) return "Price must be greater than 0"; return "";
+        if (Number(value) <= 0) return "Price must be greater than 0";
+        return "";
       case "duration":
         if (!value && value !== 0) return "Duration is required";
         if (isNaN(Number(value))) return "Duration must be a number";
-        if (Number(value) <= 0) return "Duration must be greater than 0"; return "";default:return "";
+        if (Number(value) <= 0) return "Duration must be greater than 0";
+        return "";
+      default:
+        return "";
     }
   };
 
@@ -66,9 +92,10 @@ const Service = () => {
   const { data: services = [], isLoading: loading } = useQuery({
     queryKey: ['service'], staleTime: 5000, refetchOnWindowFocus: false, refetchOnMount: false,
     queryFn: async () => {
-      const response = await getApiAdminServices();
+      const response = await getAllServices(axiosConfig);
       let servicesData = extractData(response);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
+      
       if (isCustomer) {
         filteredServices = filteredServices.filter((s: any) => s.isActive === true);
       } else if (isAdmin && !isSuperAdmin && userSalonName) {
@@ -77,8 +104,8 @@ const Service = () => {
         );
       }
 
-      const normalized = filteredServices.map((s: any, index: number) => ({
-        key: s.id || s._id || index,
+      return filteredServices.map((s: any, index: number) => ({
+        key: s.id || s._id || index.toString(),
         id: s.id || s._id,
         serviceName: s.serviceName || s.ServiceName,
         duration: s.duration || s.Duration,
@@ -86,13 +113,12 @@ const Service = () => {
         status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive',
         salonName: s.salonName || s.SalonName || 'All'
       }));
-      return normalized;
     },
   });
 
   const addServiceMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const response = await postApiAdminServices(payload);
+      const response = await createService(payload, axiosConfig);
       return extractData(response);
     },
     onSuccess: () => {
@@ -112,7 +138,7 @@ const Service = () => {
 
   const updateServiceMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      await putApiAdminServicesId(id, payload);
+      await updateService(id, payload, axiosConfig);
     },
     onSuccess: () => {
       message.success('Service updated successfully');
@@ -131,7 +157,7 @@ const Service = () => {
 
   const deleteServiceMutation = useMutation({
     mutationFn: async (id: string) => {
-      await deleteApiAdminServicesId(id);
+      await deleteService(id, axiosConfig);
     },
     onSuccess: () => {
       message.success('Service deleted successfully');
@@ -149,9 +175,9 @@ const Service = () => {
   const handleFormSubmit = (values: any) => {
     setSubmitted(true);
 
-    const nameError = validateField("serviceName", values.serviceName, !!editingService);
-    const priceError = validateField("price", values.price, !!editingService);
-    const durationError = validateField("duration", values.duration, !!editingService);
+    const nameError = validateField("serviceName", values.serviceName);
+    const priceError = validateField("price", values.price);
+    const durationError = validateField("duration", values.duration);
 
     setFieldErrors({
       serviceName: nameError,
@@ -182,6 +208,7 @@ const Service = () => {
     if (isCustomer || !record.id) return;
     deleteServiceMutation.mutate(record.id);
   };
+
   const filteredServices = useMemo(() => {
     return services.filter((s: any) =>
       (s.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -192,12 +219,16 @@ const Service = () => {
   const columns = [
     { title: 'Service Name', dataIndex: 'serviceName' },
     { title: 'Duration (mins)', dataIndex: 'duration' },
-    { title: 'Price', dataIndex: 'price', render: (price: number) => `$${price}` },
+    { 
+      title: 'Price', 
+      dataIndex: 'price',
+      render: (price: number) => `$${price}` 
+    },
     ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
     {
       title: 'Status',
       dataIndex: 'status',
-      render: (status: string) => <StatusBadge value={status} type={'user'} />
+      render: (status: string) => <StatusBadge value={status} type="user" />
     }
   ];
 
@@ -229,6 +260,7 @@ const Service = () => {
           </Button>
         )}
       </div>
+
       <Card className="mb-6">
         <div className="flex gap-4">
           <Input
@@ -250,6 +282,7 @@ const Service = () => {
           </Select>
         </div>
       </Card>
+
       <Card>
         <p className="p-2 mb-4">
           {isCustomer ? "Available Services Data" : "All Services Data"}
@@ -276,6 +309,7 @@ const Service = () => {
           rowKey="key"
         />
       </Card>
+
       {!isCustomer && (
         <ModalForm
           form={form}

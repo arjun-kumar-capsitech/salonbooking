@@ -52,5 +52,6 @@
 
         public DateTime JoinedDate { get; set; } = DateTime.UtcNow;
         public string SalonName { get; set; } = string.Empty;
-        }
+        public string? PhoneNumber { get; internal set; }
+    }
     }

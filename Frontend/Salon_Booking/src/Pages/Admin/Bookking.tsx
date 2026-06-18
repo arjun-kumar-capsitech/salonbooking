@@ -1,8 +1,8 @@
-import { Card,Input, Select, Form, message } from 'antd';
+import { Card, Input, Select, Form, message, Spin } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
@@ -10,17 +10,13 @@ import dayjs from 'dayjs';
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { Option } = Select;
-const { getApiBooking, getApiUser, getApiStaff, getApiAdminServices, putApiBookingId, deleteApiBookingId } = getSalonBookingAPI();
-interface Booking {
-  key: string | number;
-  id: string;
-  customerName: string;
-  serviceName: string;
-  staffName: string;
-  appointmentDate: string;
-  amount: number;
-  status: string;
-}
+const {
+  getAllBooking: getApiBooking,
+  getAllUsers: getApiUser,
+  getAllStaff: getApiStaff,
+  getAllServices: getApiAdminServices,
+  updateStatus: putApiBookingId
+} = getSalonBookingAPI();
 
 const Bookings = () => {
   const [modalVisible, setModalVisible] = useState(false);
@@ -28,13 +24,15 @@ const Bookings = () => {
   const [form] = Form.useForm();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const loggedInUserId = user?.id || user?._id;
   const userRole = user?.Role || user?.role;
   const userSalonName = user?.SalonName || user?.salonName;
-
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
@@ -46,81 +44,230 @@ const Bookings = () => {
     },
   };
 
-  const extractData = (response: any) => {
-    if (!response) return [];
-    const data = response.data;
-    if (data?.status === true && data?.result) return data.result;
-    if (data?.result) return data.result;
-    if (Array.isArray(data)) return data;
+  const ResponseData = (response: any) => {
+    if (!response) return null;
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data);
+      } catch {
+        return null;
+      }
+    }
+    return response.data;
+  };
+
+  const extractArray = (response: any) => {
+    const parsed = ResponseData(response);
+    if (!parsed) return [];
+    if (parsed?.status === true && parsed?.result) {
+      if (Array.isArray(parsed.result)) {
+        return parsed.result;
+      }
+      if (parsed.result?.data && Array.isArray(parsed.result.data)) {
+        return parsed.result.data;
+      }
+    }
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    if (parsed?.data && Array.isArray(parsed.data)) {
+      return parsed.data;
+    }
     return [];
   };
 
-  const resetModal = () => {
-    setModalVisible(false);
-    setEditingBooking(null);
-    form.resetFields();
-  };
-
-  const { data: bookings = [], isLoading: loading } = useQuery({
-    queryKey: ['booking'], staleTime: 5000, refetchOnWindowFocus: false, refetchOnMount: false,
+  const { data: referenceData, isLoading: referenceLoading } = useQuery({
+    queryKey: ['referenceData'], staleTime: 30000, refetchOnWindowFocus: false,
     queryFn: async () => {
-      const [bookingRes, userRes, staffRes, serviceRes] = await Promise.all([
-        getApiBooking(axiosConfig),
-        getApiUser(axiosConfig),
-        getApiStaff(axiosConfig),
-        getApiAdminServices(axiosConfig),
-      ]);
+      try {
+        const [userRes, staffRes, serviceRes] = await Promise.all([
+          getApiUser({ page: 1, pageSize: 1000 }, axiosConfig),
+          getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig),
+          getApiAdminServices(axiosConfig),
+        ]);
 
-      const bookingsData = extractData(bookingRes);
-      const usersData = extractData(userRes);
-      const staffData = extractData(staffRes);
-      const servicesData = extractData(serviceRes);
-      const customers = Array.isArray(usersData) ? usersData.filter((u: any) => u.role === 4) : [];
-      const staff = Array.isArray(staffData) ? staffData : [];
-      const services = Array.isArray(servicesData) ? servicesData : [];
-      let filteredData = Array.isArray(bookingsData) ? bookingsData : [];
-      if (isCustomer) {
-        filteredData = filteredData.filter(
-          (b: any) => String(b.customerId || b.CustomerId) === String(loggedInUserId)
-        );
-      } else if (isAdmin && !isSuperAdmin && userSalonName) {
-        filteredData = filteredData.filter(
-          (b: any) => (b.salonName || b.SalonName) === userSalonName
-        );
+        const users = extractArray(userRes);
+        const staff = extractArray(staffRes);
+        const services = extractArray(serviceRes);
+
+        const customerMap: Record<string, string> = {};
+        const staffMap: Record<string, string> = {};
+        const serviceMap: Record<string, string> = {};
+
+        users.forEach((u: any) => {
+          const role = u.role || u.Role;
+          const roleStr = String(role).toLowerCase();
+          if (roleStr === '4' || roleStr === 'customer') {
+            const id = String(u.id || u._id);
+            const name = u.fullName || u.FullName || u.name || u.Name || 'Unknown Customer';
+            customerMap[id] = name;
+          }
+        });
+
+        staff.forEach((s: any) => {
+          const id = String(s.id || s._id);
+          const name = s.name || s.Name || s.fullName || s.FullName || 'Unknown Staff';
+          staffMap[id] = name;
+        });
+
+        users.forEach((u: any) => {
+          const role = u.role || u.Role;
+          const roleStr = String(role).toLowerCase();
+          if (roleStr === '3' || roleStr === 'employee') {
+            const employeeProfileId = u.employeeProfileId || u.EmployeeProfileId;
+            if (employeeProfileId) {
+              const name = u.fullName || u.FullName || u.name || u.Name || 'Unknown Staff';
+              staffMap[String(employeeProfileId)] = name;
+            }
+          }
+        });
+
+        services.forEach((s: any) => {
+          const id = String(s.id || s._id);
+          const name = s.serviceName || s.ServiceName || s.name || s.Name || 'Unknown Service';
+          serviceMap[id] = name;
+        });
+
+        return { customerMap, staffMap, serviceMap };
+      } catch (error) {
+        console.error('Error fetching reference data:', error);
+        return { customerMap: {}, staffMap: {}, serviceMap: {} };
       }
+    },
+  });
 
-      const normalized = filteredData
-        .map((b: any, index: number) => {
-          const customer = customers.find(
-            (c: any) => String(c.id || c._id) === String(b.customerId || b.CustomerId)
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+    isFetching,
+  } = useInfiniteQuery({
+    queryKey: ['bookings', statusFilter, searchInput],
+    refetchOnWindowFocus: false,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam = 1 }) => {
+      try {
+        const response = await getApiBooking({ page: pageParam, pageSize: 4 }, axiosConfig);
+        const parsedData = ResponseData(response);
+
+        if (!parsedData?.status === true || !parsedData?.result?.data) {
+          return { 
+            data: [], 
+            totalCount: 0, 
+            hasNextPage: false, 
+            nextPage: pageParam + 1 
+          };
+        }
+
+        let rawBookings = parsedData.result.data;
+        const pagination = parsedData.result.pagination;
+
+        if (isCustomer) {
+          rawBookings = rawBookings.filter((b: any) =>
+            String(b.customerId || b.CustomerId) === String(loggedInUserId)
           );
-          const staffMember = staff.find(
-            (s: any) => String(s.id || s._id) === String(b.staffId || b.StaffId)
+        } else if (isAdmin && !isSuperAdmin && userSalonName) {
+          rawBookings = rawBookings.filter((b: any) =>
+            (b.salonName || b.SalonName) === userSalonName
           );
-          const service = services.find(
-            (s: any) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
-          );
+        }
+
+        if (searchInput) {
+          const searchLower = searchInput.toLowerCase();
+          rawBookings = rawBookings.filter((b: any) => {
+            const customerId = String(b.customerId || b.CustomerId);
+            const customerName = referenceData?.customerMap?.[customerId] || '';
+            return customerName.toLowerCase().includes(searchLower);
+          });
+        }
+
+        if (statusFilter !== 'all') {
+          rawBookings = rawBookings.filter((b: any) => {
+            const status = (b.status || b.Status || "").toLowerCase();
+            return status === statusFilter.toLowerCase();
+          });
+        }
+
+        const transformedBookings = rawBookings.map((b: any, index: number) => {
+          const customerId = String(b.customerId || b.CustomerId);
+          const staffId = String(b.staffId || b.StaffId);
+          const serviceId = String(b.serviceId || b.ServiceId);
+
+          const customerName = referenceData?.customerMap?.[customerId] || 'Unknown Customer';
+          const staffName = referenceData?.staffMap?.[staffId] || 'Unknown Staff';
+          const serviceName = referenceData?.serviceMap?.[serviceId] || 'Unknown Service';
 
           let status = (b.status || b.Status || "pending").toLowerCase();
           if (status === "complete") status = "completed";
 
           return {
-            key: b._id || b.id || index,
-            id: b._id || b.id,
-            customerName: customer?.fullName || customer?.FullName || customer?.name || "Unknown Customer",
-            serviceName: service?.serviceName || service?.ServiceName || service?.name || "Unknown Service",
-            staffName: staffMember?.name || staffMember?.Name || staffMember?.fullName || "Unknown Staff",
+            key: b.id || b._id || `${pageParam}-${index}`,
+            id: b.id || b._id || '',
+            customerName: customerName,
+            serviceName: serviceName,
+            staffName: staffName,
             appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY hh:mm A"),
             amount: b.amount || b.Amount || 0,
             status: status,
-            salonName: b.salonName || b.SalonName || 'All'
+            salonName: b.salonName || b.SalonName || 'All',
           };
-        })
-        .filter(Boolean) as Booking[];
+        });
 
-      return normalized;
+        return {
+          data: transformedBookings,
+          totalCount: pagination?.totalCount || transformedBookings.length,
+          hasNextPage: pagination?.hasNextPage || false,
+          nextPage: pageParam + 1,
+        };
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+        return {
+          data: [],
+          totalCount: 0,
+          hasNextPage: false,
+          nextPage: pageParam + 1,
+        };
+      }
     },
+    getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
+    enabled: !!referenceData,
   });
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const allBookings = useMemo(() => {
+    return infiniteData?.pages?.flatMap((page) => page.data) || [];
+  }, [infiniteData]);
+
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
   const updateBookingMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -128,24 +275,11 @@ const Bookings = () => {
     },
     onSuccess: () => {
       message.success('Booking status updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['booking'] });
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
       resetModal();
     },
     onError: (error: any) => {
       message.error(error?.response?.data?.message || 'Failed to update status');
-    },
-  });
-
-  const deleteBookingMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await deleteApiBookingId(id, axiosConfig);
-    },
-    onSuccess: () => {
-      message.success('Booking deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['booking'] });
-    },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.message || 'Failed to delete booking');
     },
   });
 
@@ -155,17 +289,19 @@ const Bookings = () => {
     }
   };
 
-  const handleDelete = (record: any) => {
-    if (isCustomer || !record.id) return;
-    deleteBookingMutation.mutate(record.id);
+  const resetModal = () => {
+    setModalVisible(false);
+    setEditingBooking(null);
+    form.resetFields();
   };
 
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((b: any) =>
-      (b.customerName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (statusFilter === 'all' || b.status === statusFilter)
-    );
-  }, [bookings, searchTerm, statusFilter]);
+  const canEdit = (record: any) => {
+    return record.status !== 'completed' && record.status !== 'cancelled';
+  };
+
+  const handleSearch = () => {
+    setSearchInput(searchTerm);
+  };
 
   const columns = [
     { title: 'Customer Name', dataIndex: 'customerName' },
@@ -174,22 +310,22 @@ const Bookings = () => {
     { title: 'Appointment Date', dataIndex: 'appointmentDate' },
     { title: 'Amount', dataIndex: 'amount', render: (amount: number) => `$${amount}` },
     ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
-    { 
-      title: 'Status', 
-      dataIndex: 'status', 
-      render: (status: string) => <StatusBadge value={status} type={'booking'} /> 
-    }
+    { title: 'Status', dataIndex: 'status', render: (status: string) => <StatusBadge value={status} type="booking" /> }
   ];
-  const canEdit = (record: any) => {
-    return record.status !== 'completed' && record.status !== 'cancelled';
-  };
+
+  const isLoading = (loading && !infiniteData) || referenceLoading;
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Booking Management</h1>
-          <p className="text-gray-600">Manage salon bookings</p>
+          <p className="text-sm text-gray-500 mt-1">Manage All Bookings</p>
+          {totalCount > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {allBookings.length} of {totalCount} bookings
+            </p>
+          )}
         </div>
       </div>
 
@@ -201,12 +337,13 @@ const Bookings = () => {
             style={{ width: 300 }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onPressEnter={handleSearch}
             allowClear
           />
           <Select
             style={{ width: 120 }}
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(value) => setStatusFilter(value)}
           >
             <Option value="all">All Status</Option>
             <Option value="confirmed">Confirmed</Option>
@@ -217,12 +354,18 @@ const Bookings = () => {
       </Card>
 
       <Card>
-        <p className="p-2 mb-4">All Bookings Data</p>
+        <div className="mb-4 flex justify-between items-center">
+          <div className="p-2">
+            All Bookings Data
+            {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
+          </div>
+        </div>
+
         <DataTable
-          data={filteredBookings}
+          data={allBookings}
           columns={columns}
-          loading={loading || updateBookingMutation.isPending || deleteBookingMutation.isPending}
-          onEdit={(record) => {
+          loading={isLoading}
+          onEdit={(record: any) => {
             if (!canEdit(record)) {
               message.warning(`Cannot edit a ${record.status} booking`);
               return;
@@ -231,10 +374,30 @@ const Bookings = () => {
             form.setFieldsValue({ status: record.status });
             setModalVisible(true);
           }}
-          onDelete={!isCustomer ? handleDelete : undefined}
           showActions={!isCustomer}
           rowKey="key"
         />
+
+        <div ref={loadMoreRef} className="py-4">
+          {isFetchingNextPage && (
+            <div className="text-center py-4">
+              <Spin size="large" />
+              <p className="mt-2 text-gray-500">Loading more bookings...</p>
+            </div>
+          )}
+
+          {!hasNextPage && allBookings.length > 0 && allBookings.length === totalCount && (
+            <div className="text-center py-4 text-green-600">
+              All {totalCount} bookings loaded successfully!
+            </div>
+          )}
+
+          {!hasNextPage && allBookings.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-gray-500">
+              No bookings found
+            </div>
+          )}
+        </div>
       </Card>
 
       {!isCustomer && (

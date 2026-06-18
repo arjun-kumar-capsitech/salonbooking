@@ -1,39 +1,70 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
-using SalonBackend.Services;
 using SalonBackend.Models.Dtos;
+using SalonBackend.Services;
+using System.Security.Claims;
 
 namespace SalonBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class StaffController : ControllerBase
     {
         private readonly StaffService _staffService;
+        
         public StaffController(StaffService staffService)
         {
             _staffService = staffService;
         }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<List<Staff>>>> GetAllStaff()
+        public async Task<ActionResult<ApiResponse<object>>> GetAllStaff(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 4)
         {
             try
             {
-                var staffList = await _staffService.GetAllAsync();
-                return Ok(new ApiResponse<List<Staff>>
+                if (page == 0 || pageSize == 0)
                 {
-                    Message = "Staff retrieved successfully",
+                    var allStaff = await _staffService.GetAllAsync();
+                    return Ok(new ApiResponse<List<Staff>>
+                    {
+                        Status = true,
+                        Message = "Staff retrieved successfully",
+                        Result = allStaff
+                    });
+                }
+
+                var (data, totalCount) = await _staffService.GetPagedAsync(page, pageSize);
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+                return Ok(new ApiResponse<object>
+                {
                     Status = true,
-                    Result = staffList
+                    Message = "Staff retrieved successfully",
+                    Result = new
+                    {
+                        Data = data,
+                        Pagination = new
+                        {
+                            CurrentPage = page,
+                            PageSize = pageSize,
+                            TotalCount = totalCount,
+                            TotalPages = totalPages,
+                            HasNextPage = page < totalPages,
+                            HasPreviousPage = page > 1
+                        }
+                    }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<List<Staff>>
+                return StatusCode(500, new ApiResponse<object>
                 {
-                    Message = ex.Message,
                     Status = false,
+                    Message = ex.Message,
                     Result = null
                 });
             }
@@ -74,6 +105,81 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [HttpGet("role/{role}")]
+        public async Task<ActionResult<ApiResponse<List<Staff>>>> GetStaffByRole(string role)
+        {
+            try
+            {
+                var staffList = await _staffService.GetByRoleAsync(role);
+                
+                return Ok(new ApiResponse<List<Staff>>
+                {
+                    Message = $"Staff with role '{role}' retrieved successfully",
+                    Status = true,
+                    Result = staffList
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<Staff>>
+                {
+                    Message = ex.Message,
+                    Status = false,
+                    Result = null
+                });
+            }
+        }
+
+        [HttpGet("salon/{salonName}")]
+        public async Task<ActionResult<ApiResponse<List<Staff>>>> GetStaffBySalon(string salonName)
+        {
+            try
+            {
+                var staffList = await _staffService.GetBySalonNameAsync(salonName);
+                
+                return Ok(new ApiResponse<List<Staff>>
+                {
+                    Message = $"Staff for salon '{salonName}' retrieved successfully",
+                    Status = true,
+                    Result = staffList
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<Staff>>
+                {
+                    Message = ex.Message,
+                    Status = false,
+                    Result = null
+                });
+            }
+        }
+
+        [HttpGet("active")]
+        public async Task<ActionResult<ApiResponse<List<Staff>>>> GetActiveStaff()
+        {
+            try
+            {
+                var staffList = await _staffService.GetActiveStaffAsync();
+                
+                return Ok(new ApiResponse<List<Staff>>
+                {
+                    Message = "Active staff retrieved successfully",
+                    Status = true,
+                    Result = staffList
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<List<Staff>>
+                {
+                    Message = ex.Message,
+                    Status = false,
+                    Result = null
+                });
+            }
+        }
+
         [HttpPost]
         public async Task<ActionResult<ApiResponse<Staff>>> CreateStaff([FromBody] StaffDto dto)
         {
@@ -96,7 +202,7 @@ namespace SalonBackend.Controllers
                     Password = dto.Password,
                     Role = dto.Role,
                     IsActive = dto.IsActive,
-                    JoinedDate = dto.JoinedDate,
+                    JoinedDate = DateTime.UtcNow,
                     SalonName = dto.SalonName
                 };
 
@@ -113,8 +219,9 @@ namespace SalonBackend.Controllers
             {
                 return StatusCode(500, new ApiResponse<Staff>
                 {
-                    Message = ex.Message
-
+                    Message = ex.Message,
+                    Status = false,
+                    Result = null
                 });
             }
         }
@@ -151,7 +258,6 @@ namespace SalonBackend.Controllers
                 existing.Password = dto.Password;
                 existing.Role = dto.Role;
                 existing.IsActive = dto.IsActive;
-                existing.JoinedDate = dto.JoinedDate;
                 existing.SalonName = dto.SalonName;
 
                 var success = await _staffService.UpdateAsync(id, existing);

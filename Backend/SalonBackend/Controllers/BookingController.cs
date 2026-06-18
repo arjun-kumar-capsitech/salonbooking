@@ -19,22 +19,48 @@ namespace SalonBackend.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<List<Booking>>>> GetAllBooking()
+        public async Task<ActionResult<ApiResponse<object>>> GetAllBooking(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 4)
         {
             try
             {
-                var bookings = await _bookingService.GetAllAsync();
+                if (page == 0 || pageSize == 0)
+                {
+                    var allBookings = await _bookingService.GetAllAsync();
+                    return Ok(new ApiResponse<List<Booking>>
+                    {
+                        Status = true,
+                        Message = "Bookings retrieved successfully",
+                        Result = allBookings
+                    });
+                }
 
-                return Ok(new ApiResponse<List<Booking>>
+                var (data, totalCount) = await _bookingService.GetPagedAsync(page, pageSize);
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+                return Ok(new ApiResponse<object>
                 {
                     Status = true,
                     Message = "Bookings retrieved successfully",
-                    Result = bookings
+                    Result = new
+                    {
+                        Data = data,
+                        Pagination = new
+                        {
+                            CurrentPage = page,
+                            PageSize = pageSize,
+                            TotalCount = totalCount,
+                            TotalPages = totalPages,
+                            HasNextPage = page < totalPages,
+                            HasPreviousPage = page > 1
+                        }
+                    }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<List<Booking>>
+                return StatusCode(500, new ApiResponse<object>
                 {
                     Status = false,
                     Message = ex.Message,
@@ -53,7 +79,7 @@ namespace SalonBackend.Controllers
                 if (booking == null)
                 {
                     return NotFound(new ApiResponse<Booking>
-                    { 
+                    {
                         Status = false,
                         Message = "Booking not found",
                         Result = null
@@ -65,7 +91,7 @@ namespace SalonBackend.Controllers
                     Status = true,
                     Message = "Booking retrieved successfully",
                     Result = booking
-                });
+                }); 
             }
             catch (Exception ex)
             {

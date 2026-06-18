@@ -9,6 +9,6 @@ namespace SalonBackend.Models.Dtos
         public bool IsActive { get; set; }
         public DateTime JoinedDate { get; set; }
         public string SalonName { get; set; } = string.Empty;
-
+        public string? PhoneNumber { get; internal set; }
     }
 }

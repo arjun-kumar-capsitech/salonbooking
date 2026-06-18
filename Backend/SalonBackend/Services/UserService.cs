@@ -32,7 +32,8 @@ namespace SalonBackend.Services
         public async Task<AuthResult> LoginAsync(string email, string password)
         {
             var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (user == null) return new AuthResult { Success = false, Message = "User not found" };
+            if (user == null) 
+                return new AuthResult { Success = false, Message = "User not found" };
 
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
                 return new AuthResult { Success = false, Message = "Invalid password" };
@@ -50,14 +51,17 @@ namespace SalonBackend.Services
                 User = user
             };
         }
+
         public async Task<AuthResult> RegisterCustomerAsync(RegisterCustomerRequest request)
         {
             return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, "", "", request.Password, UserRole.Customer);
         }
+
         public async Task<AuthResult> RegisterAdminAsync(RegisterAdminRequest request)
         {
             return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, request.SalonName, request.SalonAddress, request.Password, UserRole.Admin);
         }
+
         public async Task<AuthResult> RegisterSuperAdminAsync(RegisterSuperAdminRequest request)
         {
             var exists = await _users.Find(u => u.Role == UserRole.SuperAdmin).AnyAsync();
@@ -71,7 +75,7 @@ namespace SalonBackend.Services
             }
 
             string fixedPassword = "Superadmin123";
-             string fixedEmail = "Superadmin@gmail.com";
+            string fixedEmail = "Superadmin@gmail.com";
 
             return await RegisterUser(
                 "SuperAdmin",
@@ -148,14 +152,34 @@ namespace SalonBackend.Services
             };
         }
 
-        public async Task<List<User>> GetAllUsersAsync() =>
-            await _users.Find(_ => true).ToListAsync();
+        public async Task<List<User>> GetAllUsersAsync()
+        {
+            return await _users.Find(_ => true).ToListAsync();
+        }
 
-        public async Task<User?> GetUserByIdAsync(string id) =>
-            await _users.Find(u => u.Id == id).FirstOrDefaultAsync();
+        public async Task<(List<User> Data, long TotalCount)> GetPagedUsersAsync(int page, int pageSize)
+        {
+            var totalCount = await _users.CountDocumentsAsync(_ => true);
+            
+            var data = await _users
+                .Find(_ => true)
+                .SortByDescending(u => u.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+            
+            return (data, totalCount);
+        }
 
-        public async Task<User?> GetByIdAsync(string id) =>
-            await GetUserByIdAsync(id);
+        public async Task<User?> GetUserByIdAsync(string id)
+        {
+            return await _users.Find(u => u.Id == id).FirstOrDefaultAsync();
+        }
+
+        public async Task<User?> GetByIdAsync(string id)
+        {
+            return await GetUserByIdAsync(id);
+        }
 
         public async Task<(bool Success, string Message)> UpdateUserAsync(string id, UpdateUserRequest request)
         {
@@ -173,7 +197,7 @@ namespace SalonBackend.Services
 
             return result.ModifiedCount == 0
                 ? (false, "User not updated")
-                : (true, "User updated");
+                : (true, "User updated successfully");
         }
 
         public async Task<(bool Success, string Message)> DeleteUserAsync(string id)
@@ -182,35 +206,35 @@ namespace SalonBackend.Services
 
             return result.DeletedCount == 0
                 ? (false, "User not found")
-                : (true, "User deleted");
+                : (true, "User deleted successfully");
         }
 
         private string GenerateJwtToken(User user)
         {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.ASCII.GetBytes(
-        _configuration["Jwt:Secret"] ?? "your-secret-key-minimum-32-characters-long-here"
-        );
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(
+                _configuration["Jwt:Secret"] ?? "your-secret-key-minimum-32-characters-long-here"
+            );
 
-        var tokenDescriptor = new SecurityTokenDescriptor
-        {
-        Subject = new ClaimsIdentity(new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id),
-            new Claim(ClaimTypes.Name, user.FullName),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim(ClaimTypes.Role, user.Role.ToString()),
-            new Claim("SalonName", user.SalonName ?? "")
-        }),
-        Expires = DateTime.UtcNow.AddHours(5), 
-        SigningCredentials = new SigningCredentials(
-            new SymmetricSecurityKey(key),
-            SecurityAlgorithms.HmacSha256Signature
-        )
-        };
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.Id),
+                    new Claim(ClaimTypes.Name, user.FullName),
+                    new Claim(ClaimTypes.Email, user.Email),
+                    new Claim(ClaimTypes.Role, user.Role.ToString()),
+                    new Claim("SalonName", user.SalonName ?? "")
+                }),
+                Expires = DateTime.UtcNow.AddHours(5),
+                SigningCredentials = new SigningCredentials(
+                    new SymmetricSecurityKey(key),
+                    SecurityAlgorithms.HmacSha256Signature
+                )
+            };
 
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
         }
     }
 }

@@ -1,102 +1,236 @@
-import React, { useMemo } from "react";
-import { Card, Row, Col, message, Modal, Button } from "antd";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { Card, Row, Col, message, Modal, Button, Spin } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import { StatCard } from "../../Components/Ui/Cards";
 import { getSalonBookingAPI } from '../../api/generated';
 
-const { getApiBooking, getApiUser, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
+const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, getAllUsers: getApiUser, updateStatus: putApiBookingId } = getSalonBookingAPI();
 
 const CustomerBookings: React.FC = () => {
-  const [selectedBooking, setSelectedBooking] = React.useState<any>(null);
-  const [cancelModalVisible, setCancelModalVisible] = React.useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const loggedInUserId = user?.id || user?._id;
+  const loggedInUserName = user?.fullName || user?.FullName || user?.name || user?.Name || 'Customer';
 
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
   };
 
-  const extractData = (response: any) => {
-    if (!response || !response.data) return [];
-    if (response.data?.status === true && response.data?.result) {
-      return response.data.result;
+  const ResponseData = (response: any) => {
+    if (!response) return null;
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data);
+      } catch {
+        return null;
+      }
     }
-    if (response.data?.result) {
-      return response.data.result;
+    return response.data;
+  };
+
+  const extractArray = (response: any) => {
+    const parsed = ResponseData(response);
+    if (!parsed) return [];
+    if (parsed?.status === true && parsed?.result) {
+      if (Array.isArray(parsed.result)) {
+        return parsed.result;
+      }
+      if (parsed.result?.data && Array.isArray(parsed.result.data)) {
+        return parsed.result.data;
+      }
     }
-    if (Array.isArray(response.data)) {
-      return response.data;
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    if (parsed?.data && Array.isArray(parsed.data)) {
+      return parsed.data;
     }
     return [];
   };
 
-  const { data: customers = [] } = useQuery({
-    queryKey: ['customerBookingsCustomers'],
-    enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
+  const { data: referenceData, isLoading: referenceLoading } = useQuery({
+    queryKey: ['customerReferenceData'],
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await getApiUser(axiosConfig);
-      const usersData = extractData(res);
-      return usersData.filter((u: any) => u.role === 4);
-    }
-  });
+      try {
+        let users: any[] = [];
+        try {
+          const userRes = await getApiUser({ page: 1, pageSize: 1000 }, axiosConfig);
+          users = extractArray(userRes);
+        } catch (error) {}
 
-  const { data: staff = [] } = useQuery({
-    queryKey: ['customerBookingsStaff'],
-    enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const res = await getApiStaff(axiosConfig);
-      return extractData(res);
-    }
-  });
+        const staffRes = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
+        const staff = extractArray(staffRes);
 
-  const { data: services = [] } = useQuery({
-    queryKey: ['customerBookingsServices'],
-    enabled: !!token,  staleTime: 5000,  refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const res = await getApiAdminServices(axiosConfig);
-      return extractData(res);
-    }
-  });
+        const serviceRes = await getApiAdminServices(axiosConfig);
+        const services = extractArray(serviceRes);
 
-  const { data: bookings = [], isLoading,} = useQuery({
-    queryKey: ['customerBookingsList'],
-    enabled: !!token && customers.length > 0 && staff.length > 0 && services.length > 0,staleTime: 5000, refetchOnWindowFocus: false,
-    queryFn: async () => {
-      const res = await getApiBooking(axiosConfig);
-      const bookingsData = extractData(res);
+        const staffMap: Record<string, string> = {};
+        const serviceMap: Record<string, string> = {};
 
-      const filtered = bookingsData.filter(
-        (b: any) => String(b.customerId || b.CustomerId) === String(loggedInUserId)
-      );
-      return filtered.map((b: any, index: number) => {
-        const staffMember = staff.find(
-          (s: any) => String(s.id || s._id) === String(b.staffId || b.StaffId)
-        );
-        const service = services.find(
-          (s: any) => String(s.id || s._id) === String(b.serviceId || b.ServiceId)
-        );
+        staff.forEach((s: any) => {
+          const id = String(s.id || s._id);
+          const name = s.name || s.Name || s.fullName || s.FullName || 'Unknown Staff';
+          staffMap[id] = name;
+        });
 
-        const statusValue = (b.status || b.Status || "").toLowerCase();
-        return {
-          key: b.id || b._id || index,
-          id: b.id || b._id,
-          salonName: b.salonName || b.SalonName || "Unknown",
-          staffName: staffMember?.name || staffMember?.Name || "Unknown",
-          serviceName: service?.serviceName || service?.ServiceName || "Unknown",
-          appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY - hh:mm A"),
-          amount: b.amount || b.Amount,
-          status: statusValue,
+        if (users.length > 0) {
+          users.forEach((u: any) => {
+            const role = u.role || u.Role;
+            const roleStr = String(role).toLowerCase();
+            if (roleStr === '3' || roleStr === 'employee') {
+              const employeeProfileId = u.employeeProfileId || u.EmployeeProfileId;
+              if (employeeProfileId) {
+                const name = u.fullName || u.FullName || u.name || u.Name || 'Unknown Staff';
+                staffMap[String(employeeProfileId)] = name;
+              }
+            }
+          });
+        }
+
+        const hardcodedStaff: Record<string, string> = {
+          '6a0c27e6e4598fcfa3d4d72d': 'Jayesh',
         };
-      });
-    }
+
+        Object.entries(hardcodedStaff).forEach(([id, name]) => {
+          if (!staffMap[id]) {
+            staffMap[id] = name;
+          }
+        });
+
+        services.forEach((s: any) => {
+          const id = String(s.id || s._id);
+          const name = s.serviceName || s.ServiceName || s.name || s.Name || 'Unknown Service';
+          serviceMap[id] = name;
+        });
+
+        return { staffMap, serviceMap };
+      } catch (error) {
+        return { staffMap: {}, serviceMap: {} };
+      }
+    },
   });
+
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+    isFetching,
+  } = useInfiniteQuery({
+    queryKey: ['customerBookingsList'],
+    refetchOnWindowFocus: false,
+    initialPageParam: 1,
+    enabled: !!token && !!referenceData,
+    queryFn: async ({ pageParam = 1 }) => {
+      try {
+        const res = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
+        const parsedData = ResponseData(res);
+
+        if (!parsedData?.status === true || !parsedData?.result?.data) {
+          return {
+            data: [],
+            totalCount: 0,
+            hasNextPage: false,
+            nextPage: pageParam + 1,
+          };
+        }
+
+        let rawBookings = parsedData.result.data;
+        const pagination = parsedData.result.pagination;
+
+        rawBookings = rawBookings.filter((b: any) =>
+          String(b.customerId || b.CustomerId) === String(loggedInUserId)
+        );
+
+        const transformedBookings = rawBookings.map((b: any, index: number) => {
+          const staffId = String(b.staffId || b.StaffId);
+          const serviceId = String(b.serviceId || b.ServiceId);
+
+          let status = (b.status || b.Status || "pending").toLowerCase();
+          if (status === "complete") status = "completed";
+
+          const customerName = loggedInUserName;
+          const staffName = referenceData?.staffMap?.[staffId] || 'Unknown Staff';
+          const serviceName = referenceData?.serviceMap?.[serviceId] || 'Unknown Service';
+
+          return {
+            key: b.id || b._id || `${pageParam}-${index}`,
+            id: b.id || b._id || '',
+            customerName: customerName,
+            salonName: b.salonName || b.SalonName || 'Unknown',
+            serviceName: serviceName,
+            staffName: staffName,
+            appointmentDate: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY - hh:mm A"),
+            amount: b.amount || b.Amount || 0,
+            status: status,
+          };
+        });
+
+        return {
+          data: transformedBookings,
+          totalCount: pagination?.totalCount || transformedBookings.length,
+          hasNextPage: pagination?.hasNextPage || false,
+          nextPage: pageParam + 1,
+        };
+      } catch (error) {
+        return {
+          data: [],
+          totalCount: 0,
+          hasNextPage: false,
+          nextPage: pageParam + 1,
+        };
+      }
+    },
+    getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
+  });
+
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const bookings = useMemo(() => {
+    return infiniteData?.pages?.flatMap((page) => page.data) || [];
+  }, [infiniteData]);
+
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
   const cancelBookingMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -109,9 +243,8 @@ const CustomerBookings: React.FC = () => {
       setSelectedBooking(null);
     },
     onError: (error: any) => {
-      console.error(error);
       message.error(error?.response?.data?.message || "Failed to cancel booking");
-    }
+    },
   });
 
   const showCancelConfirm = (record: any) => {
@@ -168,6 +301,10 @@ const CustomerBookings: React.FC = () => {
 
   const columns = [
     {
+      title: "Customer Name",
+      dataIndex: "customerName",
+    },
+    {
       title: "Salon Name",
       dataIndex: "salonName",
     },
@@ -210,12 +347,30 @@ const CustomerBookings: React.FC = () => {
       ),
     },
   ];
+
+  if (!token) {
+    return (
+      <div className="p-6 text-center">
+        <Card>
+          <p>Please login to view your bookings</p>
+        </Card>
+      </div>
+    );
+  }
+
+  const isLoading = (loading && !infiniteData) || referenceLoading;
+
   return (
     <>
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">My Bookings</h1>
           <p className="text-gray-500">All your appointments</p>
+          {totalCount > 0 && (
+            <p className="text-sm text-gray-400 mt-1">
+              Showing {bookings.length} of {totalCount} bookings
+            </p>
+          )}
         </div>
 
         <Row gutter={[16, 16]} className="mb-6">
@@ -232,12 +387,41 @@ const CustomerBookings: React.FC = () => {
         </Row>
 
         <Card className="shadow-sm border border-gray-100">
+          <div className="mb-4 flex justify-between items-center">
+            <p className="p-2">
+              My Bookings
+              {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
+            </p>
+          </div>
+
           <DataTable
             data={bookings}
             columns={columns}
-            loading={isLoading || cancelBookingMutation.isPending}
+            loading={isLoading}
             showActions={false}
+            rowKey="key"
           />
+
+          <div ref={loadMoreRef} className="py-4">
+            {isFetchingNextPage && (
+              <div className="text-center py-4">
+                <Spin size="large" />
+                <p className="mt-2 text-gray-500">Loading more bookings...</p>
+              </div>
+            )}
+
+            {!hasNextPage && bookings.length > 0 && bookings.length === totalCount && (
+              <div className="text-center py-4 text-green-600">
+                All {totalCount} bookings loaded successfully!
+              </div>
+            )}
+
+            {!hasNextPage && bookings.length === 0 && !isLoading && (
+              <div className="text-center py-8 text-gray-500">
+                No bookings found
+              </div>
+            )}
+          </div>
         </Card>
       </div>
 
@@ -269,4 +453,5 @@ const CustomerBookings: React.FC = () => {
     </>
   );
 };
+
 export default CustomerBookings;

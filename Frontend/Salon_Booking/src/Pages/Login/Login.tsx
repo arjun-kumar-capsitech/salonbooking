@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const { postApiUserLogin } = getSalonBookingAPI();
+const {  login:postApiUserLogin } = getSalonBookingAPI();
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);

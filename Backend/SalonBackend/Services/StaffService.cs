@@ -7,6 +7,7 @@ namespace SalonBackend.Services
     public class StaffService
     {
         private readonly IMongoCollection<Staff> _staff;
+        
         public StaffService(IMongoDatabase database)
         {
             _staff = database.GetCollection<Staff>("Staff");
@@ -15,6 +16,20 @@ namespace SalonBackend.Services
         public async Task<List<Staff>> GetAllAsync()
         {
             return await _staff.Find(_ => true).ToListAsync();
+        }
+
+        public async Task<(List<Staff> Data, long TotalCount)> GetPagedAsync(int page, int pageSize)
+        {
+            var totalCount = await _staff.CountDocumentsAsync(_ => true);
+            
+            var data = await _staff
+                .Find(_ => true)
+                .SortByDescending(x => x.JoinedDate)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+            
+            return (data, totalCount);
         }
 
         public async Task<Staff?> GetByIdAsync(string id)
@@ -47,6 +62,21 @@ namespace SalonBackend.Services
 
             var result = await _staff.DeleteOneAsync(s => s.Id == id);
             return result.DeletedCount > 0;
+        }
+
+        public async Task<List<Staff>> GetByRoleAsync(string role)
+        {
+            return await _staff.Find(s => s.Role == role).ToListAsync();
+        }
+
+        public async Task<List<Staff>> GetBySalonNameAsync(string salonName)
+        {
+            return await _staff.Find(s => s.SalonName == salonName).ToListAsync();
+        }
+
+        public async Task<List<Staff>> GetActiveStaffAsync()
+        {
+            return await _staff.Find(s => s.IsActive == true).ToListAsync();
         }
     }
 }

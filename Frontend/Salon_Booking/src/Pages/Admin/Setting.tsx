@@ -6,7 +6,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { TabPane } = Tabs;
-const { getApiUserId, putApiUserId, getApiTime, postApiTime, putApiTimeDay } = getSalonBookingAPI();
+
+const { 
+  getUserById: getApiUserId,
+  updateUser: putApiUserId,
+  getAll: getApiTime,
+  createOrUpdate: postApiTime,
+  update: putApiTimeDay
+} = getSalonBookingAPI();
 
 interface DayTiming {
   id?: string;
@@ -54,7 +61,10 @@ const Settings = () => {
   };
   
   const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['user', loginUser?.id], staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
+    queryKey: ['user', loginUser?.id],
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     enabled: !!loginUser?.id && !!token,
     queryFn: async () => {
       const response = await getApiUserId(loginUser.id, axiosConfig);
@@ -63,7 +73,10 @@ const Settings = () => {
   });
   
   const { data: timingsData, isLoading: timingsLoading } = useQuery({
-    queryKey: ['timings', loginUser?.id],staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
+    queryKey: ['timings', loginUser?.id],
+    staleTime: 5000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     enabled: !!loginUser?.id && !!token,
     queryFn: async () => {
       const response = await getApiTime(axiosConfig);
@@ -161,6 +174,7 @@ const Settings = () => {
   const getTimeValue = (timeString: string) => {
     return timeString ? dayjs(timeString, "HH:mm") : null;
   };
+  
   const handleSave = async () => {
     const values = await form.validateFields();
     await updateProfileMutation.mutateAsync(values);
@@ -275,4 +289,5 @@ const Settings = () => {
     </div>
   );
 };
+
 export default Settings;

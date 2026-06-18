@@ -1,30 +1,31 @@
-import { Card, Button, Input, Select, Form, message } from 'antd';
+import { Card, Button, Input, Select, Form, message, Spin } from 'antd';
 import { PlusOutlined, SearchOutlined, MailOutlined } from '@ant-design/icons';
 import { UserCog } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 
+const { getAllUsers: getApiUser, getAllStaff: getApiStaff, updateUser: putApiUserId, registerEmployee: postApiUserRegisterEmployee, registerCustomer: postApiUserRegisterCustomer, deleteUser: deleteApiUserId } = getSalonBookingAPI();
 const { Option } = Select;
-const { getApiUser, getApiStaff, putApiUserId, postApiUserRegisterEmployee, postApiUserRegisterCustomer, deleteApiUserId } = getSalonBookingAPI();
-
 const User = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchText, setSearchText] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');  
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchInput, setSearchInput] = useState('');
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userRole = user?.Role || user?.role;
   const userSalonName = user?.SalonName || user?.salonName;
-
   const isAdmin = userRole === "Admin" || userRole === "admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
@@ -34,14 +35,16 @@ const User = () => {
       'Content-Type': 'application/json',
     },
   };
-
-  const extractData = (response: any) => {
-    if (!response) return [];
-    const data = response.data;
-    if (data?.status === true && data?.result) return data.result;
-    if (data?.result) return data.result;
-    if (Array.isArray(data)) return data;
-    return [];
+  const ResponseData = (response: any) => {
+    if (!response) return null;
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data);
+      } catch {
+        return null;
+      }
+    }
+    return response.data;
   };
 
   const resetModal = () => {
@@ -49,77 +52,181 @@ const User = () => {
     setEditingUser(null);
     form.resetFields();
   };
-
-  const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'], staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
+  const { data: staffData, isLoading: staffLoading } = useQuery({
+    queryKey: ['staffList'],staleTime: 3000,refetchOnWindowFocus: false,
+    refetchOnMount: false,
     queryFn: async () => {
-      const response = await getApiStaff(axiosConfig);
-      return extractData(response);
-    }
-  });
+      const response = await getApiStaff(undefined,axiosConfig);
+      const parsedData = ResponseData(response);
 
-  const { data: usersApiData = [], isLoading: usersLoading, } = useQuery({
-    queryKey: ['allUsers'],staleTime: 5000,refetchOnWindowFocus: false,refetchOnMount: false,
-    queryFn: async () => {
-      const response = await getApiUser(axiosConfig);
-      return extractData(response);
-    }
-  });
+      if (parsedData?.status === true && parsedData?.result) {
+        const result = parsedData.result;
+        if (Array.isArray(result)) {
+          return result;
+        } else if (result.data && Array.isArray(result.data)) {
+          return result.data;
+        }
+      }
 
+      return [];
+    },
+  });
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: usersLoading,
+  } = useInfiniteQuery({
+    queryKey: ['allUsers', roleFilter, statusFilter, searchInput],
+    staleTime: 5000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam = 1 }) => {
+      try {
+        const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
+        const parsedData = ResponseData(response);
+        if (!parsedData?.status || !parsedData?.result) {
+          return {
+            data: [],
+            totalCount: 0,
+            hasNextPage: false,
+            nextPage: pageParam + 1
+          };
+        }
+        let rawUsers = [];
+        let pagination = null;
+
+        const result = parsedData.result;
+        if (Array.isArray(result)) {
+          rawUsers = result;
+          pagination = parsedData.pagination || null;
+        } else if (result?.data && Array.isArray(result.data)) {
+          rawUsers = result.data;
+          pagination = result.pagination || parsedData.pagination || null;
+        } else {
+          rawUsers = [];
+        }
+        let filteredUsers = rawUsers.filter((u: any) => u.role === 3 || u.role === 4);
+        if (isCustomer) {
+          filteredUsers = filteredUsers.filter((u: any) => u.id === user.id || u._id === user._id);
+        }
+        if (isAdmin && !isSuperAdmin && userSalonName) {
+          const adminSalon = userSalonName.toString().trim().toLowerCase();
+          const staffEmails = (staffData || [])
+            .filter((s: any) => {
+              const staffSalon = (s.salonName || s.SalonName || "").toString().trim().toLowerCase();
+              return staffSalon === adminSalon;
+            })
+            .map((s: any) => (s.email || s.Email || "").toLowerCase())
+            .filter(Boolean);
+
+          filteredUsers = filteredUsers.filter((u: any) => {
+            if (u.role === 4) return true;
+            if (u.role === 3) {
+              const userEmail = (u.email || "").toLowerCase();
+              return staffEmails.includes(userEmail);
+            }
+            return false;
+          });
+        }
+        const transformedUsers = filteredUsers.map((u: any, index: number) => ({
+          key: u.id || u._id || `${pageParam}-${index}`,
+          id: u.id || u._id,
+          fullName: u.fullName || u.FullName || u.name || 'Unknown',
+          email: u.email || u.Email || 'No Email',
+          role: u.role || u.Role || 4,
+          isActive: u.isActive !== undefined ? u.isActive : u.IsActive,
+          createdAt: u.createdAt || u.CreatedAt || new Date().toISOString(),
+          phoneNumber: u.phoneNumber || u.PhoneNumber || '',
+          salonName: u.salonName || u.SalonName || ''
+        }));
+        let finalData = transformedUsers;
+        if (roleFilter !== 'all') {
+          finalData = finalData.filter((u: any) => {
+            if (roleFilter === 'Employee') return u.role === 3;
+            if (roleFilter === 'Customer') return u.role === 4;
+            return true;
+          });
+        }
+        if (statusFilter !== 'all') {
+          finalData = finalData.filter((u: any) => {
+            if (statusFilter === 'active') return u.isActive === true;
+            if (statusFilter === 'inactive') return u.isActive === false;
+            return true;
+          });
+        }
+        if (searchInput) {
+          const searchLower = searchInput.toLowerCase();
+          finalData = finalData.filter((u: any) =>
+            u.fullName?.toLowerCase().includes(searchLower) ||
+            u.email?.toLowerCase().includes(searchLower)
+          );
+        }
+        const totalCount = pagination?.totalCount || filteredUsers.length || finalData.length;
+        const hasNext = pagination?.hasNextPage || false;
+        return {
+          data: finalData,
+          totalCount: totalCount,
+          hasNextPage: hasNext,
+          nextPage: pageParam + 1,
+        };
+      } catch (error) {
+        console.error('Error fetching users:', error);
+        return {
+          data: [],
+          totalCount: 0,
+          hasNextPage: false,
+          nextPage: pageParam + 1,
+        };
+      }
+    },
+    getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
+    enabled: staffData !== undefined,
+  });
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage) return;
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const allUsers = useMemo(() => {
+    return infiniteData?.pages?.flatMap(page => page.data) || [];
+  }, [infiniteData]);
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
   const staffList = useMemo(() => {
-    return staffApiData.map((s: any) => ({
+    return (staffData || []).map((s: any) => ({
       id: s.id || s._id,
-      name: s.name || s.Name || s.fullName,
+      name: s.name || s.Name || s.fullName || s.FullName || 'Unknown',
       email: s.email || s.Email,
       salonName: s.salonName || s.SalonName
     }));
-  }, [staffApiData]);
-
-  const users = useMemo(() => {
-    if (!usersApiData.length) return [];
-    let filtered = usersApiData.filter((u: any) => u.role === 3 || u.role === 4);
-    if (isCustomer) {
-      filtered = [];
-    } else if (isAdmin && !isSuperAdmin) {
-      if (userSalonName) {
-        const employeeEmailsInSalon = staffApiData
-          .filter((s: any) => {
-            const staffSalon = (s.salonName || s.SalonName || "").toString().trim();
-            const adminSalon = userSalonName.toString().trim();
-            return staffSalon.toLowerCase() === adminSalon.toLowerCase();
-          })
-          .map((s: any) => (s.email || s.Email || "").toLowerCase());
-        
-        filtered = filtered.filter((u: any) => {
-          if (u.role === 4) {
-            return true;
-          } else if (u.role === 3) {
-            const userEmail = (u.email || "").toLowerCase();
-            return employeeEmailsInSalon.includes(userEmail);
-          }
-          return false;
-        });
-      } else {
-        filtered = filtered.filter((u: any) => u.role === 4);
-      }
-    }
-
-    return filtered.map((u: any, index: number) => ({
-      key: u.id || u._id || index,
-      id: u.id || u._id,
-      fullName: u.fullName || u.FullName,
-      email: u.email || u.Email,
-      role: u.role || u.Role,
-      isActive: u.isActive !== undefined ? u.isActive : u.IsActive,
-      createdAt: u.createdAt || u.CreatedAt,
-      phoneNumber: u.phoneNumber || u.PhoneNumber
-    }));
-  }, [usersApiData, staffApiData, isCustomer, isAdmin, isSuperAdmin, userSalonName]);
+  }, [staffData]);
 
   const createEmployeeMutation = useMutation({
     mutationFn: async (payload: any) => {
       const response = await postApiUserRegisterEmployee(payload, axiosConfig);
-      if (response.data?.status !== true) {
+      if (!response.data?.status) {
         throw new Error(response.data?.message || "Employee registration failed");
       }
       return response;
@@ -137,7 +244,7 @@ const User = () => {
   const createCustomerMutation = useMutation({
     mutationFn: async (payload: any) => {
       const response = await postApiUserRegisterCustomer(payload, axiosConfig);
-      if (response.data?.status !== true) {
+      if (!response.data?.status) {
         throw new Error(response.data?.message || "Customer registration failed");
       }
       return response;
@@ -154,7 +261,11 @@ const User = () => {
 
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      await putApiUserId(id, payload, axiosConfig);
+      const response = await putApiUserId(id, payload, axiosConfig);
+      if (!response.data?.status) {
+        throw new Error(response.data?.message || "Update failed");
+      }
+      return response;
     },
     onSuccess: () => {
       message.success('User updated successfully');
@@ -168,7 +279,11 @@ const User = () => {
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
-      await deleteApiUserId(id, axiosConfig);
+      const response = await deleteApiUserId(id, axiosConfig);
+      if (!response.data?.status) {
+        throw new Error(response.data?.message || "Delete failed");
+      }
+      return response;
     },
     onSuccess: () => {
       message.success('User deleted successfully');
@@ -178,20 +293,22 @@ const User = () => {
       message.error(error?.response?.data?.message || 'Failed to delete user');
     },
   });
-
   const handleFormSubmit = async (values: any) => {
     if (editingUser) {
       const payload = {
         fullName: values.fullName,
         email: values.email,
+        phoneNumber: values.phoneNumber || '',
+        salonName: values.salonName || '',
+        salonAddress: values.salonAddress || '',
         role: Number(values.role),
         isActive: values.isActive === "true"
       };
-      updateUserMutation.mutate({ id: editingUser.id, payload });
+      await updateUserMutation.mutateAsync({ id: editingUser.id, payload });
     } else {
-      if (values.role === 3) {
-        createEmployeeMutation.mutate({ staffId: values.staffId });
-      } else if (values.role === 4) {
+      if (Number(values.role) === 3) {
+        await createEmployeeMutation.mutateAsync({ staffId: values.staffId });
+      } else if (Number(values.role) === 4) {
         const payload = {
           fullName: values.fullName,
           email: values.email,
@@ -199,7 +316,7 @@ const User = () => {
           password: values.password || "123456",
           confirmPassword: values.password || "123456"
         };
-        createCustomerMutation.mutate(payload);
+        await createCustomerMutation.mutateAsync(payload);
       } else {
         message.error("Invalid role selected");
       }
@@ -211,44 +328,26 @@ const User = () => {
     deleteUserMutation.mutate(record.id);
   };
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((u: any) =>
-      (u.fullName ?? '').toLowerCase().includes(searchText.toLowerCase()) ||
-      (u.email ?? '').toLowerCase().includes(searchText.toLowerCase())
-    ).filter((u: any) => {
-      if (roleFilter === "all") return true;
-      if (roleFilter === "Employee") return u.role === 3;
-      if (roleFilter === "Customer") return u.role === 4;
-      return true;
-    }).filter((u: any) => {
-      if (statusFilter === "all") return true;
-      if (statusFilter === "active") return u.isActive === true;
-      if (statusFilter === "inactive") return u.isActive === false;
-      return true;
-    });
-  }, [users, searchText, roleFilter, statusFilter]);
+  const handleSearch = () => {
+    setSearchInput(searchTerm);
+  };
 
   const columns = [
     {
       title: 'User',
       dataIndex: 'fullName',
-      key: 'fullName',
-      render: (text: string) => (
-        <div className="font-semibold">{text || 'N/A'}</div>
-      )
-    },
-    {
-      title: 'Email',
-      dataIndex: 'email',
-      key: 'email',
-      render: (email: string) => (
-        <div className="text-gray-500 text-sm">{email || "-"}</div>
+      render: (text: string, record: any) => (
+        <div>
+          <div className="font-semibold">{text || 'N/A'}</div>
+          <div className="text-gray-500 text-sm">
+            <MailOutlined className="mr-1" /> {record.email || '-'}
+          </div>
+        </div>
       )
     },
     {
       title: 'Role',
       dataIndex: 'role',
-      key: 'role',
       render: (role: number) => (
         <span>{role === 3 ? "Employee" : "Customer"}</span>
       )
@@ -256,7 +355,6 @@ const User = () => {
     {
       title: 'Status',
       dataIndex: 'isActive',
-      key: 'isActive',
       render: (isActive: boolean) => (
         <StatusBadge type="user" value={isActive ? "active" : "inactive"} />
       )
@@ -264,11 +362,13 @@ const User = () => {
     {
       title: 'Created At',
       dataIndex: 'createdAt',
-      key: 'createdAt',
       render: (date: string) => date ? dayjs(date).format("DD MMM YYYY hh:mm A") : 'N/A',
       width: 180
     }
   ];
+
+  const isLoading = usersLoading && !infiniteData || staffLoading;
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -289,15 +389,15 @@ const User = () => {
           Add User
         </Button>
       </div>
-
       <Card className="mb-6">
-        <div className="flex gap-4">
+        <div className="flex gap-4 flex-wrap">
           <Input
             placeholder="Search users..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onPressEnter={handleSearch}
             allowClear
           />
           <Select
@@ -322,16 +422,16 @@ const User = () => {
       </Card>
 
       <Card>
-        <p className="p-2 mb-4">Employee & Customer users</p>
         <DataTable
-          data={filteredUsers}
+          data={allUsers}
           columns={columns}
-          loading={staffLoading || usersLoading ||  createEmployeeMutation.isPending ||  createCustomerMutation.isPending || updateUserMutation.isPending || deleteUserMutation.isPending}
+          loading={isLoading}
           onEdit={(record: any) => {
             setEditingUser(record);
             form.setFieldsValue({
               fullName: record.fullName,
               email: record.email,
+              phoneNumber: record.phoneNumber,
               role: record.role,
               isActive: String(record.isActive)
             });
@@ -341,8 +441,27 @@ const User = () => {
           showActions={true}
           rowKey="key"
         />
-      </Card>
+        <div ref={loadMoreRef} className="py-4">
+          {isFetchingNextPage && (
+            <div className="text-center py-4">
+              <Spin size="large" />
+              <p className="mt-2 text-gray-500">Loading more users...</p>
+            </div>
+          )}
 
+          {!hasNextPage && allUsers.length > 0 && allUsers.length === totalCount && (
+            <div className="text-center py-4 text-green-600">
+               All {totalCount} users loaded
+            </div>
+          )}
+
+          {!hasNextPage && allUsers.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-gray-500">
+              No users found
+            </div>
+          )}
+        </div>
+      </Card>
       <ModalForm
         form={form}
         open={modalVisible}
@@ -386,11 +505,11 @@ const User = () => {
               type="password"
               required={true}
             />
-            
+
             <Form.Item noStyle shouldUpdate>
               {({ getFieldValue }) => {
                 const role = getFieldValue('role');
-                return role === 3 ? (
+                return Number(role) === 3 ? (
                   <SelectField
                     label="Select Staff"
                     name="staffId"
@@ -417,6 +536,7 @@ const User = () => {
             { value: 4, label: 'Customer' }
           ]}
         />
+
         <SelectField
           label="Status"
           name="isActive"

@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const { postApiUserRegisterCustomer, postApiUserRegisterAdmin } = getSalonBookingAPI();
+const { registerCustomer, registerAdmin } = getSalonBookingAPI();
+
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -13,15 +14,20 @@ function Register() {
   const [success, setSuccess] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ fullName: "", email: "", phoneNo: "",salonName: "", salonAddress: "", password: "",confirmPassword: ""});
-  
+  const [formData, setFormData] = useState({
+    fullName: "",
+    email: "",
+    phoneNo: "",
+    salonName: "",
+    salonAddress: "",
+    password: "",
+    confirmPassword: ""
+  });
+
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "fullName":
         if (!value.trim()) return "Full name is required";
-        if (!/^[A-Z][a-z]*(\s[A-Z][a-z]*)*$/.test(value.trim())) {
-          return "First letter of each word must be capital";
-        }
         return "";
       case "email":
         if (!value.trim()) return "Email is required";
@@ -60,6 +66,7 @@ function Register() {
   const getFieldError = (field: string) => {
     return submitted ? validateField(field, formData[field as keyof typeof formData]) : "";
   };
+
   const isFormValid = () => {
     const fields = userType === "Admin"
       ? ["fullName", "email", "phoneNo", "salonName", "salonAddress", "password", "confirmPassword"]
@@ -70,7 +77,7 @@ function Register() {
 
   const customerRegisterMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await postApiUserRegisterCustomer(data);
+      const response = await registerCustomer(data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -82,7 +89,6 @@ function Register() {
       }
     },
     onError: (err: any) => {
-      console.error("Registration error:", err);
       const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
       setError(errorMessage);
     }
@@ -90,7 +96,7 @@ function Register() {
 
   const adminRegisterMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await postApiUserRegisterAdmin(data);
+      const response = await registerAdmin(data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -102,7 +108,6 @@ function Register() {
       }
     },
     onError: (err: any) => {
-      console.error("Registration error:", err);
       const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
       setError(errorMessage);
     }
@@ -136,6 +141,7 @@ function Register() {
       });
     }
   };
+
   const isLoading = customerRegisterMutation.isPending || adminRegisterMutation.isPending;
 
   return (
@@ -192,7 +198,7 @@ function Register() {
               placeholder="Full Name"
               value={formData.fullName}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg ${
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 getFieldError("fullName") ? "border-red-500" : "border-gray-300"
               }`}
               disabled={isLoading}
@@ -207,7 +213,7 @@ function Register() {
               placeholder="Email"
               value={formData.email}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg ${
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 getFieldError("email") ? "border-red-500" : "border-gray-300"
               }`}
               disabled={isLoading}
@@ -222,7 +228,7 @@ function Register() {
               placeholder="Phone No."
               value={formData.phoneNo}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg ${
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                 getFieldError("phoneNo") ? "border-red-500" : "border-gray-300"
               }`}
               disabled={isLoading}
@@ -239,7 +245,7 @@ function Register() {
                   placeholder="Salon Name"
                   value={formData.salonName}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg ${
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     getFieldError("salonName") ? "border-red-500" : "border-gray-300"
                   }`}
                   disabled={isLoading}
@@ -252,10 +258,11 @@ function Register() {
                   placeholder="Salon Address"
                   value={formData.salonAddress}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg resize-none ${
+                  className={`w-full px-4 py-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     getFieldError("salonAddress") ? "border-red-500" : "border-gray-300"
                   }`}
                   disabled={isLoading}
+                  rows={2}
                 />
                 {getFieldError("salonAddress") && <p className="text-red-500 text-sm mt-1">{getFieldError("salonAddress")}</p>}
               </div>
@@ -270,14 +277,14 @@ function Register() {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 ${
+                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   getFieldError("password") ? "border-red-500" : "border-gray-300"
                 }`}
                 disabled={isLoading}
               />
               <button
                 type="button"
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
               >
@@ -295,14 +302,14 @@ function Register() {
                 placeholder="Confirm Password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 ${
+                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   getFieldError("confirmPassword") ? "border-red-500" : "border-gray-300"
                 }`}
                 disabled={isLoading}
               />
               <button
                 type="button"
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500"
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 disabled={isLoading}
               >
@@ -314,7 +321,7 @@ function Register() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-medium hover:bg-blue-700 transition-colors mt-4 disabled:opacity-50"
+            className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-medium hover:bg-blue-700 transition-colors mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
           >
             {isLoading ? "Registering..." : "Sign Up"}

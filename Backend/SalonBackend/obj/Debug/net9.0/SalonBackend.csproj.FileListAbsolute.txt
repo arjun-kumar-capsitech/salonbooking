@@ -1,14 +1,16 @@
-C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.exe
-C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\appsettings.Development.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\appsettings.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.staticwebassets.runtime.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.staticwebassets.endpoints.json
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.exe
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.deps.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.runtimeconfig.json
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\SalonBackend.pdb
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\BCrypt-Net-Next.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\DnsClient.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\Microsoft.Bcl.Cryptography.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\Microsoft.IdentityModel.Abstractions.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\Microsoft.IdentityModel.JsonWebTokens.dll
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\Microsoft.IdentityModel.Logging.dll
@@ -33,6 +35,7 @@ C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\ob
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.csproj.CoreCompileInputs.cache
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.MvcApplicationPartsAssemblyInfo.cs
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.sourcelink.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\rjimswa.dswa.cache.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\rjsmrazor.dswa.cache.json
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\rjsmcshtml.dswa.cache.json
@@ -109,5 +112,3 @@ C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\ob
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.pdb
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.genruntimeconfig.cache
 C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\ref\SalonBackend.dll
-C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\bin\Debug\net9.0\BCrypt.Net-Next.dll
-C:\Users\DELL\OneDrive\Desktop\Salon Booking Application\Backend\SalonBackend\obj\Debug\net9.0\SalonBackend.sourcelink.json

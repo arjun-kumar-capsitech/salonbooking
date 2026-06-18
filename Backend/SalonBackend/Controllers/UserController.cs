@@ -1,12 +1,15 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
 using SalonBackend.Services;
 using SalonBackend.Models.Dtos;
+using System.Security.Claims;
 
 namespace SalonBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
@@ -16,6 +19,7 @@ namespace SalonBackend.Controllers
             _userService = userService;
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<ActionResult<ApiResponse<object>>> Login([FromBody] LoginRequest request)
         {
@@ -61,6 +65,7 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [AllowAnonymous]
         [HttpPost("register/customer")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterCustomer([FromBody] RegisterCustomerRequest dto)
         {
@@ -106,6 +111,7 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpPost("register/admin")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterAdmin([FromBody] RegisterAdminRequest dto)
         {
@@ -151,6 +157,7 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpPost("register/employee")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterEmployee([FromBody] RegisterEmployeeRequest dto)
         {
@@ -196,6 +203,7 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "SuperAdmin")]
         [HttpPost("register/superadmin")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterSuperAdmin([FromBody] RegisterSuperAdminRequest dto)
         {
@@ -241,31 +249,59 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<List<User>>>> GetAllUsers()
+        public async Task<ActionResult<ApiResponse<object>>> GetAllUsers(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 4)
         {
             try
             {
-                var users = await _userService.GetAllUsersAsync();
-                
-                return Ok(new ApiResponse<List<User>>
+                if (page == 0 || pageSize == 0)
+                {
+                    var allUsers = await _userService.GetAllUsersAsync();
+                    return Ok(new ApiResponse<List<User>>
+                    {
+                        Status = true,
+                        Message = "Users retrieved successfully",
+                        Result = allUsers
+                    });
+                }
+
+                var (data, totalCount) = await _userService.GetPagedUsersAsync(page, pageSize);
+                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+                return Ok(new ApiResponse<object>
                 {
                     Status = true,
                     Message = "Users retrieved successfully",
-                    Result = users
+                    Result = new
+                    {
+                        Data = data,
+                        Pagination = new
+                        {
+                            CurrentPage = page,
+                            PageSize = pageSize,
+                            TotalCount = totalCount,
+                            TotalPages = totalPages,
+                            HasNextPage = page < totalPages,
+                            HasPreviousPage = page > 1
+                        }
+                    }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<List<User>>
+                return StatusCode(500, new ApiResponse<object>
                 {
                     Status = false,
-                    Message = $"Error: {ex.Message}",
+                    Message = ex.Message,
                     Result = null
                 });
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<User>>> GetUserById(string id)
         {
@@ -301,14 +337,15 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpPut("{id}")]
-        public async Task<ActionResult<ApiResponse<User>>> UpdateUser(string id, [FromBody] UpdateUserRequest dto)
+        public async Task<ActionResult<ApiResponse<string>>> UpdateUser(string id, [FromBody] UpdateUserRequest dto)
         {
             try
             {
                 if (dto == null)
                 {
-                    return BadRequest(new ApiResponse<User>
+                    return BadRequest(new ApiResponse<string>
                     {
                         Status = false,
                         Message = "Invalid update data",
@@ -320,15 +357,15 @@ namespace SalonBackend.Controllers
                 
                 if (result.Success)
                 {
-                    return Ok(new ApiResponse<User>
+                    return Ok(new ApiResponse<string>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = null
+                        Result = "Updated"
                     });
                 }
                 
-                return BadRequest(new ApiResponse<User>
+                return BadRequest(new ApiResponse<string>
                 {
                     Status = false,
                     Message = result.Message,
@@ -337,7 +374,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<User>
+                return StatusCode(500, new ApiResponse<string>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -346,6 +383,7 @@ namespace SalonBackend.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(string id)
         {

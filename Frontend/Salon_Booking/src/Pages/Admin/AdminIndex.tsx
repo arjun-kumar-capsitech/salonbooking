@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, Button, Row, Col } from 'antd';
 import { getSalonBookingAPI } from '../../api/generated';
 
-const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
+const {  getAllStaff: getApiStaff, getAllServices: getApiAdminServices, getAllBooking: getApiBooking} = getSalonBookingAPI();
 const AdminIndex = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem("authToken");
@@ -22,20 +22,34 @@ const AdminIndex = () => {
     },
   };
 
-  const extractData = (response: any) => {
-    if (!response) return [];
-    const data = response.data;
-    if (data?.status === true && data?.result) return data.result;
-    if (Array.isArray(data)) return data;
-    if (data?.result) return data.result;
-    return [];
+  const ResponseData = (response: any) => {
+    if (!response) return null;
+    if (typeof response.data === 'string') {
+      try {
+        return JSON.parse(response.data);
+      } catch {
+        return null;
+      }
+    }
+    return response.data;
   };
 
+  const extractData = (response: any) => {
+    if (!response) return [];
+    const parsedData = ResponseData(response);
+    if (!parsedData?.status === true || !parsedData?.result?.data) {
+      return [];
+    }
+    return parsedData.result.data;
+  };
   const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'],
-    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    queryKey: ['staff'],    enabled: !!token,staleTime: 5000,refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await getApiStaff(axiosConfig);
+      const res = await getApiStaff(
+        { page: 1, pageSize: 100 },
+        axiosConfig
+      );
       let staffData = extractData(res);
       let filteredStaff = Array.isArray(staffData) ? staffData : [];
       if (isAdmin && !isSuperAdmin && userSalonName) {
@@ -55,10 +69,17 @@ const AdminIndex = () => {
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
     queryKey: ['services'],
-    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    enabled: !!token,
+    staleTime: 5000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
-      let servicesData = extractData(res);
+      const parsedData = ResponseData(res);
+      let servicesData = [];
+      if (parsedData?.status === true && parsedData?.result) {
+        servicesData = Array.isArray(parsedData.result) ? parsedData.result : [];
+      }
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
       if (isAdmin && !isSuperAdmin && userSalonName) {
         filteredServices = filteredServices.filter((s: any) =>
@@ -77,10 +98,16 @@ const AdminIndex = () => {
   });
 
   const { data: bookings = [] } = useQuery({
-    queryKey: ['Bookings'],
-    enabled: !!token, staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false,
+    queryKey: ['bookings'],
+    enabled: !!token,
+    staleTime: 5000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
-      const res = await getApiBooking(axiosConfig);
+      const res = await getApiBooking(
+        { page: 1, pageSize: 100 }, 
+        axiosConfig
+      );
       let bookingsData = extractData(res);
       let filteredBookings = Array.isArray(bookingsData) ? bookingsData : [];
       if (isAdmin && !isSuperAdmin && userSalonName) {
@@ -88,7 +115,7 @@ const AdminIndex = () => {
           (b.salonName || b.SalonName) === userSalonName
         );
       }
-      const mapped = filteredBookings.map((b: any, index: number) => {
+      return filteredBookings.map((b: any, index: number) => {
         let amount = 0;
         const status = (b.status || b.Status || "").toLowerCase();
         if (status !== 'cancelled') {
@@ -96,17 +123,18 @@ const AdminIndex = () => {
           else if (b.Amount) amount = parseFloat(b.Amount);
         }
         return {
+          key: b.id || b._id || index,
           id: b.id || b._id || index,
           amount: isNaN(amount) ? 0 : amount,
           date: b.appointmentDate || b.AppointmentDate || b.createdAt || b.CreatedAt || new Date(),
           status: status
         };
       });
-      return mapped;
     }
   });
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
+  
   const monthlyData = (() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const revenueByMonth = new Array(12).fill(0);
@@ -123,6 +151,7 @@ const AdminIndex = () => {
 
   const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
+
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
     { title: 'Duration (min)', dataIndex: 'duration' },

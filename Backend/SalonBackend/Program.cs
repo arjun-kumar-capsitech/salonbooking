@@ -3,6 +3,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using SalonBackend.Services;
+using Swashbuckle.AspNetCore.SwaggerGen;
 using System.Text;
 
 
@@ -15,6 +16,16 @@ builder.Services.AddCors(options =>
         policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
+    });
+});
+
+builder.Services.AddSwaggerGen(c =>
+{
+    c.CustomOperationIds(apiDesc =>
+    {
+        return apiDesc.TryGetMethodInfo(out var methodInfo)
+            ? methodInfo.Name
+            : null;
     });
 });
 
