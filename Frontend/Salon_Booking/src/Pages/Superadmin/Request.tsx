@@ -42,9 +42,7 @@ const Request = () => {
 
   dispatch(showSuperAdminRequest());
   const { data: requests = [], isLoading } = useQuery({
-    queryKey: ['salonRequests'],
-    enabled: !!token,
-    staleTime: 5000,
+    queryKey: ['salonRequests'],enabled: !!token,staleTime: 5000,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const response = await getApiUser({ page: 1, pageSize:100 }, axiosConfig);

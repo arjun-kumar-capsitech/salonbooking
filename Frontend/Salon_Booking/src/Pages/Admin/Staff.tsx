@@ -81,13 +81,11 @@ const Staff = () => {
   };
 
   const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
-    queryKey: ['staff', statusFilter, searchInput],
-    refetchOnWindowFocus: false,
+    queryKey: ['staff', statusFilter, searchInput],refetchOnWindowFocus: false,
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const response = await getApiStaff({ page: pageParam, pageSize: 4 }, axiosConfig);
       const parsedData = ResponseData(response);
-
       if (!parsedData?.status === true || !parsedData?.result?.data) {
         return {
           data: [],
@@ -236,7 +234,6 @@ const Staff = () => {
     setSubmitted(true);
 
     const isEdit = !!editingStaff;
-
     const nameError = validateField("name", values.name, isEdit);
     const emailError = validateField("email", values.email, isEdit);
     const passwordError = validateField("password", values.Password, isEdit);
@@ -471,5 +468,4 @@ const Staff = () => {
     </div>
   );
 };
-
 export default Staff;

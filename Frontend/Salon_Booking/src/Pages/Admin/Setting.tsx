@@ -61,9 +61,7 @@ const Settings = () => {
   };
   
   const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['user', loginUser?.id],
-    staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['user', loginUser?.id],staleTime: 5000,refetchOnWindowFocus: false,
     refetchOnMount: false,
     enabled: !!loginUser?.id && !!token,
     queryFn: async () => {

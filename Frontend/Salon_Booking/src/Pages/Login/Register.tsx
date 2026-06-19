@@ -5,7 +5,6 @@ import { useMutation } from "@tanstack/react-query";
 import { getSalonBookingAPI } from "../../api/generated";
 
 const { registerCustomer, registerAdmin } = getSalonBookingAPI();
-
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -15,15 +14,10 @@ function Register() {
   const [submitted, setSubmitted] = useState(false);
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phoneNo: "",
-    salonName: "",
-    salonAddress: "",
-    password: "",
+    fullName: "", email: "", phoneNo: "",
+    salonName: "", salonAddress: "",password: "",
     confirmPassword: ""
   });
-
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "fullName":
@@ -151,7 +145,6 @@ function Register() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Sign up</h1>
           <p className="text-gray-600 text-sm">Fill your information below</p>
         </div>
-
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
             {error}

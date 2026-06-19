@@ -15,7 +15,6 @@ const AdminIndex = () => {
   const userSalonName = user?.SalonName || user?.salonName;
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
-
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -33,7 +32,6 @@ const AdminIndex = () => {
     }
     return response.data;
   };
-
   const extractData = (response: any) => {
     if (!response) return [];
     const parsedData = ResponseData(response);
@@ -68,10 +66,7 @@ const AdminIndex = () => {
   });
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'],
-    enabled: !!token,
-    staleTime: 5000,
-    refetchOnMount: false,
+    queryKey: ['services'], enabled: !!token, staleTime: 5000, refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
@@ -98,10 +93,7 @@ const AdminIndex = () => {
   });
 
   const { data: bookings = [] } = useQuery({
-    queryKey: ['bookings'],
-    enabled: !!token,
-    staleTime: 5000,
-    refetchOnMount: false,
+    queryKey: ['bookings'],enabled: !!token, staleTime: 5000, refetchOnMount: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await getApiBooking(
@@ -134,7 +126,6 @@ const AdminIndex = () => {
   });
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
-  
   const monthlyData = (() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const revenueByMonth = new Array(12).fill(0);
@@ -151,7 +142,6 @@ const AdminIndex = () => {
 
   const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
-
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
     { title: 'Duration (min)', dataIndex: 'duration' },

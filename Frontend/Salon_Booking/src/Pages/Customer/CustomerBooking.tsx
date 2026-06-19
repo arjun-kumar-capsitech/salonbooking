@@ -60,9 +60,7 @@ const CustomerBookings: React.FC = () => {
   };
 
   const { data: referenceData, isLoading: referenceLoading } = useQuery({
-    queryKey: ['customerReferenceData'],
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
+    queryKey: ['customerReferenceData'],staleTime: 30000,refetchOnWindowFocus: false,
     queryFn: async () => {
       try {
         let users: any[] = [];
@@ -103,7 +101,6 @@ const CustomerBookings: React.FC = () => {
         const hardcodedStaff: Record<string, string> = {
           '6a0c27e6e4598fcfa3d4d72d': 'Jayesh',
         };
-
         Object.entries(hardcodedStaff).forEach(([id, name]) => {
           if (!staffMap[id]) {
             staffMap[id] = name;
@@ -123,16 +120,8 @@ const CustomerBookings: React.FC = () => {
     },
   });
 
-  const {
-    data: infiniteData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: loading,
-    isFetching,
-  } = useInfiniteQuery({
-    queryKey: ['customerBookingsList'],
-    refetchOnWindowFocus: false,
+  const {data: infiniteData,fetchNextPage,hasNextPage,isFetchingNextPage,isLoading: loading,isFetching,} = useInfiniteQuery({
+    queryKey: ['customerBookingsList'], refetchOnWindowFocus: false,
     initialPageParam: 1,
     enabled: !!token && !!referenceData,
     queryFn: async ({ pageParam = 1 }) => {
@@ -409,13 +398,6 @@ const CustomerBookings: React.FC = () => {
                 <p className="mt-2 text-gray-500">Loading more bookings...</p>
               </div>
             )}
-
-            {!hasNextPage && bookings.length > 0 && bookings.length === totalCount && (
-              <div className="text-center py-4 text-green-600">
-                All {totalCount} bookings loaded successfully!
-              </div>
-            )}
-
             {!hasNextPage && bookings.length === 0 && !isLoading && (
               <div className="text-center py-8 text-gray-500">
                 No bookings found
@@ -453,5 +435,4 @@ const CustomerBookings: React.FC = () => {
     </>
   );
 };
-
 export default CustomerBookings;

@@ -3,21 +3,14 @@ import { SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { DataTable, StatusBadge } from '../../Components/Ui/Table';
+import { DataTable} from '../../Components/Ui/Table';
 import { SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from 'dayjs';
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { Option } = Select;
-const {
-  getAllBooking: getApiBooking,
-  getAllUsers: getApiUser,
-  getAllStaff: getApiStaff,
-  getAllServices: getApiAdminServices,
-  updateStatus: putApiBookingId
-} = getSalonBookingAPI();
-
+const {getAllBooking: getApiBooking, getAllUsers: getApiUser, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId} = getSalonBookingAPI();
 const Bookings = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBooking, setEditingBooking] = useState<any>(null);
@@ -36,7 +29,6 @@ const Bookings = () => {
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
-
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -89,7 +81,6 @@ const Bookings = () => {
         const users = extractArray(userRes);
         const staff = extractArray(staffRes);
         const services = extractArray(serviceRes);
-
         const customerMap: Record<string, string> = {};
         const staffMap: Record<string, string> = {};
         const serviceMap: Record<string, string> = {};
@@ -136,14 +127,7 @@ const Bookings = () => {
     },
   });
 
-  const {
-    data: infiniteData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: loading,
-    isFetching,
-  } = useInfiniteQuery({
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching,} = useInfiniteQuery({
     queryKey: ['bookings', statusFilter, searchInput],
     refetchOnWindowFocus: false,
     initialPageParam: 1,
@@ -194,7 +178,6 @@ const Bookings = () => {
           const customerId = String(b.customerId || b.CustomerId);
           const staffId = String(b.staffId || b.StaffId);
           const serviceId = String(b.serviceId || b.ServiceId);
-
           const customerName = referenceData?.customerMap?.[customerId] || 'Unknown Customer';
           const staffName = referenceData?.staffMap?.[staffId] || 'Unknown Staff';
           const serviceName = referenceData?.serviceMap?.[serviceId] || 'Unknown Service';
@@ -303,18 +286,7 @@ const Bookings = () => {
     setSearchInput(searchTerm);
   };
 
-  const columns = [
-    { title: 'Customer Name', dataIndex: 'customerName' },
-    { title: 'Service Name', dataIndex: 'serviceName' },
-    { title: 'Staff Name', dataIndex: 'staffName' },
-    { title: 'Appointment Date', dataIndex: 'appointmentDate' },
-    { title: 'Amount', dataIndex: 'amount', render: (amount: number) => `$${amount}` },
-    ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
-    { title: 'Status', dataIndex: 'status', render: (status: string) => <StatusBadge value={status} type="booking" /> }
-  ];
-
   const isLoading = (loading && !infiniteData) || referenceLoading;
-
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -363,7 +335,6 @@ const Bookings = () => {
 
         <DataTable
           data={allBookings}
-          columns={columns}
           loading={isLoading}
           onEdit={(record: any) => {
             if (!canEdit(record)) {
@@ -385,13 +356,6 @@ const Bookings = () => {
               <p className="mt-2 text-gray-500">Loading more bookings...</p>
             </div>
           )}
-
-          {!hasNextPage && allBookings.length > 0 && allBookings.length === totalCount && (
-            <div className="text-center py-4 text-green-600">
-              All {totalCount} bookings loaded successfully!
-            </div>
-          )}
-
           {!hasNextPage && allBookings.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No bookings found

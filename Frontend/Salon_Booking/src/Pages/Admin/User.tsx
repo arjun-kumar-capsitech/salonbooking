@@ -71,18 +71,8 @@ const User = () => {
       return [];
     },
   });
-  const {
-    data: infiniteData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: usersLoading,
-  } = useInfiniteQuery({
-    queryKey: ['allUsers', roleFilter, statusFilter, searchInput],
-    staleTime: 5000,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    initialPageParam: 1,
+  const {data: infiniteData,fetchNextPage,hasNextPage,isFetchingNextPage,isLoading: usersLoading,} = useInfiniteQuery({
+    queryKey: ['allUsers', roleFilter, statusFilter, searchInput],staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false, initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       try {
         const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);

@@ -12,7 +12,6 @@ const { getAllUsers: getApiUser, getAllBooking: getApiBooking } = getSalonBookin
 const SuperAdminDashboard = () => {
   const navigate = useNavigate()
   const token = localStorage.getItem("authToken")
-  
   const axiosConfig = {
     headers: { Authorization: `Bearer ${token}` }
   }

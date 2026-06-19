@@ -8,7 +8,6 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 
 const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices } = getSalonBookingAPI();
-
 const EmployeeDashboard = () => {
   const [activeTab, setActiveTab] = useState("today");
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -51,10 +50,7 @@ const EmployeeDashboard = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeStaffDashboard'],
-    enabled: !!token,
-    staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['employeeStaffDashboard'], enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       return extractData(res);
@@ -89,18 +85,9 @@ const EmployeeDashboard = () => {
     return map;
   }, [servicesData]);
 
-  const {
-    data: infiniteData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: loading,
-    isFetching,
-  } = useInfiniteQuery({
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching,} = useInfiniteQuery({
     queryKey: ['employeeDashboardBookings', staffId],
-    enabled: !!token && !!staffId,
-    refetchOnWindowFocus: false,
-    initialPageParam: 1,
+    enabled: !!token && !!staffId,  refetchOnWindowFocus: false,  initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const res = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
       const parsedData = ResponseData(res);
@@ -290,13 +277,6 @@ const EmployeeDashboard = () => {
               <p className="mt-2 text-gray-500">Loading more bookings...</p>
             </div>
           )}
-
-          {!hasNextPage && bookings.length > 0 && bookings.length === totalCount && (
-            <div className="text-center py-4 text-green-600">
-              All {totalCount} bookings loaded successfully!
-            </div>
-          )}
-
           {!hasNextPage && bookings.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No bookings found

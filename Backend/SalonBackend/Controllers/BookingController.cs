@@ -59,6 +59,7 @@ namespace SalonBackend.Controllers
                 });
             }
             catch (Exception ex)
+            
             {
                 return StatusCode(500, new ApiResponse<object>
                 {
