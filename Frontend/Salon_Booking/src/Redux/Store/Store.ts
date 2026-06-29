@@ -19,8 +19,6 @@ export const store = configureStore({
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
-
-// Selectors
 export const authData = (state: RootState) => state.auth;
 export const userData = (state: RootState) => state.user;
 export const userContentData = (state: RootState) => state.userContent;

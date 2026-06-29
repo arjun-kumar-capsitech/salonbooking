@@ -28,7 +28,7 @@ const SuperAdminDashboard = () => {
   }
 
   const { data: usersData = [], isLoading: usersLoading } = useQuery({
-    queryKey: ['superAdminUsers'],enabled: !!token,staleTime: 5000,refetchOnWindowFocus: false,
+    queryKey: ['superAdminUsers'],enabled: !!token,
     queryFn: async () => {
       const res = await getApiUser({ page: 1, pageSize: 100 }, axiosConfig)
       const parsedData = ResponseData(res)
@@ -51,10 +51,7 @@ const SuperAdminDashboard = () => {
   })
 
   const { data: bookingsData = [] } = useQuery({
-    queryKey: ['superAdminBookings'],
-    enabled: !!token,
-    staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['superAdminBookings'],enabled: !!token,
     queryFn: async () => {
       const res = await getApiBooking(undefined, axiosConfig)
       const parsedData = ResponseData(res)
@@ -121,7 +118,6 @@ const SuperAdminDashboard = () => {
   const monthlyData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     const revenueByMonth = new Array(12).fill(0)
-    
     bookingsData.forEach((booking: any) => {
       const status = (booking.status || booking.Status || "").toLowerCase()
       if (status === 'completed' || status === 'confirmed') {

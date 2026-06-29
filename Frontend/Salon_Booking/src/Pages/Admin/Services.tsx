@@ -7,31 +7,27 @@ import { getSalonBookingAPI } from '../../api/generated';
 import { DataTable, StatusBadge } from '../../Components/Ui/Table';
 import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
+import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-
-const {getAllServices,createService,updateService,deleteService} = getSalonBookingAPI();
-
+const { getAllServices, createService, updateService, deleteService } = getSalonBookingAPI();
 const Service = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [submitted, setSubmitted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ serviceName: '', price: '', duration: '' });
-  const queryClient = useQueryClient();  
+  const queryClient = useQueryClient();
   const userStr = localStorage.getItem("user");
   const user = userStr ? JSON.parse(userStr) : {};
   const userRole = user?.role || user?.Role;
   const userSalonName = user?.salonName || user?.SalonName;
-
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin" || userRole === 1;
   const isCustomer = userRole === "Customer" || userRole === 4;
 
   const token = localStorage.getItem("authToken");
-  
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -81,21 +77,17 @@ const Service = () => {
     }
   };
 
-  const resetModal = () => {
-    setModalVisible(false);
-    setEditingService(null);
-    form.resetFields();
-    setSubmitted(false);
+  const resetModal = () => { setModalVisible(false); setEditingService(null); form.resetFields(); setSubmitted(false);
     setFieldErrors({ serviceName: '', price: '', duration: '' });
   };
 
   const { data: services = [], isLoading: loading } = useQuery({
-    queryKey: ['service'], staleTime: 5000, refetchOnWindowFocus: false, refetchOnMount: false,
+    queryKey: ['service'],
     queryFn: async () => {
       const response = await getAllServices(axiosConfig);
       let servicesData = extractData(response);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
-      
+
       if (isCustomer) {
         filteredServices = filteredServices.filter((s: any) => s.isActive === true);
       } else if (isAdmin && !isSuperAdmin && userSalonName) {
@@ -115,6 +107,20 @@ const Service = () => {
       }));
     },
   });
+
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    services,
+    ['serviceName'],
+    500
+  );
+
+  const filteredServices = useMemo(() => {
+    let result = searchFilteredData || [];
+    if (statusFilter !== 'all') {
+      result = result.filter((s: any) => s.status === statusFilter);
+    }
+    return result;
+  }, [searchFilteredData, statusFilter]);
 
   const addServiceMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -174,11 +180,9 @@ const Service = () => {
 
   const handleFormSubmit = (values: any) => {
     setSubmitted(true);
-
     const nameError = validateField("serviceName", values.serviceName);
     const priceError = validateField("price", values.price);
     const durationError = validateField("duration", values.duration);
-
     setFieldErrors({
       serviceName: nameError,
       price: priceError,
@@ -209,20 +213,13 @@ const Service = () => {
     deleteServiceMutation.mutate(record.id);
   };
 
-  const filteredServices = useMemo(() => {
-    return services.filter((s: any) =>
-      (s.serviceName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) &&
-      (statusFilter === 'all' || s.status === statusFilter)
-    );
-  }, [services, searchTerm, statusFilter]);
-
   const columns = [
     { title: 'Service Name', dataIndex: 'serviceName' },
     { title: 'Duration (mins)', dataIndex: 'duration' },
-    { 
-      title: 'Price', 
+    {
+      title: 'Price',
       dataIndex: 'price',
-      render: (price: number) => `$${price}` 
+      render: (price: number) => `$${price}`
     },
     ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
     {
@@ -267,8 +264,8 @@ const Service = () => {
             placeholder="Search service..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
           <Select

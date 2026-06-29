@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button, Input, message, Modal, Card, Spin } from "antd";
 import { SearchOutlined, CheckOutlined, CloseOutlined, ShopOutlined } from "@ant-design/icons";
 import { useDispatch } from "react-redux";
@@ -6,8 +6,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { showSuperAdminRequest } from "../../Redux/Store/Slice/columnsSlice";
 import { DataTable } from "../../Components/Ui/Table";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { getAllUsers: getApiUser } = getSalonBookingAPI();
+
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusColor = () => {
     switch (status) {
@@ -22,12 +24,12 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 const Request = () => {
   const dispatch = useDispatch();
-  const [searchText, setSearchText] = useState("");
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
+
   const ResponseData = (response: any) => {
     if (!response) return null;
     if (typeof response.data === 'string') {
@@ -40,14 +42,17 @@ const Request = () => {
     return response.data;
   };
 
-  dispatch(showSuperAdminRequest());
+  // ✅ Fixed: dispatch in useEffect - No Infinite Loop
+  useEffect(() => {
+    dispatch(showSuperAdminRequest());
+  }, [dispatch]);
+
   const { data: requests = [], isLoading } = useQuery({
-    queryKey: ['salonRequests'],enabled: !!token,staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['salonRequests'],
+    enabled: !!token,
     queryFn: async () => {
-      const response = await getApiUser({ page: 1, pageSize:100 }, axiosConfig);
+      const response = await getApiUser({ page: 1, pageSize: 100 }, axiosConfig);
       const parsedData = ResponseData(response);
-      
       if (!parsedData?.status || !parsedData?.result) {
         return [];
       }
@@ -62,6 +67,7 @@ const Request = () => {
       } else {
         rawUsers = [];
       }
+      
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       return rawUsers
         .filter((u: any) => u.role === 2 || u.Role === 2)
@@ -75,6 +81,17 @@ const Request = () => {
         }));
     }
   });
+
+  // ✅ useSearch hook - Auto debounce with 500ms
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    requests,
+    ['companyName', 'owner', 'email'],
+    500
+  );
+
+  const filteredRequests = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
@@ -101,15 +118,6 @@ const Request = () => {
   const handleReject = (id: string) => {
     updateStatusMutation.mutate({ id, status: "rejected" });
   };
-
-  const filteredRequests = useMemo(() => {
-    if (!searchText) return requests;
-    return requests.filter((r: any) =>
-      r.companyName?.toLowerCase().includes(searchText.toLowerCase()) ||
-      r.owner?.toLowerCase().includes(searchText.toLowerCase()) ||
-      r.email?.toLowerCase().includes(searchText.toLowerCase())
-    );
-  }, [requests, searchText]);
 
   const columns = [
     {
@@ -149,6 +157,11 @@ const Request = () => {
         <div>
           <h1 className="text-2xl font-bold">Salon Requests</h1>
           <p className="text-gray-600">Manage salon registration requests</p>
+          {requests.length > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {filteredRequests.length} of {requests.length} requests
+            </p>
+          )}
         </div>
       </div>
 
@@ -187,6 +200,7 @@ const Request = () => {
           />
         )}
       </Card>
+
       <Modal 
         title="Request Details" 
         open={viewModalVisible} 

@@ -7,9 +7,7 @@ import { authData } from '../../Redux/Store/Store';
 
 const EmployeeIndex: React.FC = () => {
   const dispatch = useDispatch();
-
   const { user } = useSelector((authData));
-
   useEffect(() => {
     if (user?.role) {
       dispatch(setPermissionsByRole({ role: user.role }));

@@ -12,7 +12,6 @@ import { authData } from "./Redux/Store/Store";
 function App() {
   const dispatch = useDispatch();
   const { token, user } = useSelector((authData) );
-
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     const user = localStorage.getItem("user");
@@ -46,14 +45,12 @@ function App() {
     <>
       <Routes>
         <Route path="/signup" element={<Register />} />
-
         <Route
           path="/"
           element={
             token ? <Navigate to={getDashboardPath()} replace /> : <Login />
           }
         />
-
         <Route
           path="/*"
           element={

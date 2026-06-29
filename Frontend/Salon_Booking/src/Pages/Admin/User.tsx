@@ -8,6 +8,7 @@ import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { getAllUsers: getApiUser, getAllStaff: getApiStaff, updateUser: putApiUserId, registerEmployee: postApiUserRegisterEmployee, registerCustomer: postApiUserRegisterCustomer, deleteUser: deleteApiUserId } = getSalonBookingAPI();
 const { Option } = Select;
@@ -15,10 +16,8 @@ const User = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
@@ -29,12 +28,14 @@ const User = () => {
   const isAdmin = userRole === "Admin" || userRole === "admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
+
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   };
+
   const ResponseData = (response: any) => {
     if (!response) return null;
     if (typeof response.data === 'string') {
@@ -52,11 +53,11 @@ const User = () => {
     setEditingUser(null);
     form.resetFields();
   };
+
   const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffList'],staleTime: 3000,refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    queryKey: ['staffList'],
     queryFn: async () => {
-      const response = await getApiStaff(undefined,axiosConfig);
+      const response = await getApiStaff(undefined, axiosConfig);
       const parsedData = ResponseData(response);
 
       if (parsedData?.status === true && parsedData?.result) {
@@ -67,16 +68,18 @@ const User = () => {
           return result.data;
         }
       }
-
       return [];
     },
   });
-  const {data: infiniteData,fetchNextPage,hasNextPage,isFetchingNextPage,isLoading: usersLoading,} = useInfiniteQuery({
-    queryKey: ['allUsers', roleFilter, statusFilter, searchInput],staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false, initialPageParam: 1,
+
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading } = useInfiniteQuery({
+    queryKey: ['allUsers', roleFilter, statusFilter],
+    initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       try {
         const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
         const parsedData = ResponseData(response);
+
         if (!parsedData?.status || !parsedData?.result) {
           return {
             data: [],
@@ -85,10 +88,11 @@ const User = () => {
             nextPage: pageParam + 1
           };
         }
+
         let rawUsers = [];
         let pagination = null;
-
         const result = parsedData.result;
+
         if (Array.isArray(result)) {
           rawUsers = result;
           pagination = parsedData.pagination || null;
@@ -98,10 +102,13 @@ const User = () => {
         } else {
           rawUsers = [];
         }
+
         let filteredUsers = rawUsers.filter((u: any) => u.role === 3 || u.role === 4);
+
         if (isCustomer) {
           filteredUsers = filteredUsers.filter((u: any) => u.id === user.id || u._id === user._id);
         }
+
         if (isAdmin && !isSuperAdmin && userSalonName) {
           const adminSalon = userSalonName.toString().trim().toLowerCase();
           const staffEmails = (staffData || [])
@@ -121,6 +128,7 @@ const User = () => {
             return false;
           });
         }
+
         const transformedUsers = filteredUsers.map((u: any, index: number) => ({
           key: u.id || u._id || `${pageParam}-${index}`,
           id: u.id || u._id,
@@ -132,7 +140,9 @@ const User = () => {
           phoneNumber: u.phoneNumber || u.PhoneNumber || '',
           salonName: u.salonName || u.SalonName || ''
         }));
+
         let finalData = transformedUsers;
+
         if (roleFilter !== 'all') {
           finalData = finalData.filter((u: any) => {
             if (roleFilter === 'Employee') return u.role === 3;
@@ -140,6 +150,7 @@ const User = () => {
             return true;
           });
         }
+
         if (statusFilter !== 'all') {
           finalData = finalData.filter((u: any) => {
             if (statusFilter === 'active') return u.isActive === true;
@@ -147,15 +158,10 @@ const User = () => {
             return true;
           });
         }
-        if (searchInput) {
-          const searchLower = searchInput.toLowerCase();
-          finalData = finalData.filter((u: any) =>
-            u.fullName?.toLowerCase().includes(searchLower) ||
-            u.email?.toLowerCase().includes(searchLower)
-          );
-        }
+
         const totalCount = pagination?.totalCount || filteredUsers.length || finalData.length;
         const hasNext = pagination?.hasNextPage || false;
+
         return {
           data: finalData,
           totalCount: totalCount,
@@ -175,12 +181,14 @@ const User = () => {
     getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
     enabled: staffData !== undefined,
   });
+
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
 
     if (observerRef.current) {
       observerRef.current.disconnect();
     }
+
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
@@ -189,9 +197,11 @@ const User = () => {
       },
       { threshold: 0.1 }
     );
+
     if (loadMoreRef.current) {
       observerRef.current.observe(loadMoreRef.current);
     }
+
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
@@ -203,7 +213,19 @@ const User = () => {
   const allUsers = useMemo(() => {
     return infiniteData?.pages?.flatMap(page => page.data) || [];
   }, [infiniteData]);
+
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allUsers,
+    ['fullName', 'email'],
+    500
+  );
+
+  const filteredUsers = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
+
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
+
   const staffList = useMemo(() => {
     return (staffData || []).map((s: any) => ({
       id: s.id || s._id,
@@ -283,6 +305,7 @@ const User = () => {
       message.error(error?.response?.data?.message || 'Failed to delete user');
     },
   });
+
   const handleFormSubmit = async (values: any) => {
     if (editingUser) {
       const payload = {
@@ -316,10 +339,6 @@ const User = () => {
   const handleDelete = (record: any) => {
     if (!record.id) return;
     deleteUserMutation.mutate(record.id);
-  };
-
-  const handleSearch = () => {
-    setSearchInput(searchTerm);
   };
 
   const columns = [
@@ -357,7 +376,7 @@ const User = () => {
     }
   ];
 
-  const isLoading = usersLoading && !infiniteData || staffLoading;
+  const isLoading = (usersLoading && !infiniteData) || staffLoading;
 
   return (
     <div className="p-6">
@@ -379,15 +398,15 @@ const User = () => {
           Add User
         </Button>
       </div>
+
       <Card className="mb-6">
         <div className="flex gap-4 flex-wrap">
           <Input
             placeholder="Search users..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onPressEnter={handleSearch}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
           <Select
@@ -413,7 +432,7 @@ const User = () => {
 
       <Card>
         <DataTable
-          data={allUsers}
+          data={filteredUsers}
           columns={columns}
           loading={isLoading}
           onEdit={(record: any) => {
@@ -431,6 +450,7 @@ const User = () => {
           showActions={true}
           rowKey="key"
         />
+
         <div ref={loadMoreRef} className="py-4">
           {isFetchingNextPage && (
             <div className="text-center py-4">
@@ -439,19 +459,20 @@ const User = () => {
             </div>
           )}
 
-          {!hasNextPage && allUsers.length > 0 && allUsers.length === totalCount && (
+          {!hasNextPage && filteredUsers.length > 0 && filteredUsers.length === totalCount && (
             <div className="text-center py-4 text-green-600">
-               All {totalCount} users loaded
+              ✅ All {totalCount} users loaded
             </div>
           )}
 
-          {!hasNextPage && allUsers.length === 0 && !isLoading && (
+          {!hasNextPage && filteredUsers.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No users found
             </div>
           )}
         </div>
       </Card>
+
       <ModalForm
         form={form}
         open={modalVisible}
@@ -477,6 +498,7 @@ const User = () => {
           placeholder="Enter user name"
           required={true}
         />
+
         <InputField
           label="Email"
           name="email"

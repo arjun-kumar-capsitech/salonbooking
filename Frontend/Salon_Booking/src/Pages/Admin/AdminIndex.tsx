@@ -41,8 +41,7 @@ const AdminIndex = () => {
     return parsedData.result.data;
   };
   const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'],    enabled: !!token,staleTime: 5000,refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    queryKey: ['staff'], enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff(
         { page: 1, pageSize: 100 },
@@ -66,8 +65,7 @@ const AdminIndex = () => {
   });
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'], enabled: !!token, staleTime: 5000, refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    queryKey: ['services'], enabled: !!token, 
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       const parsedData = ResponseData(res);
@@ -93,8 +91,7 @@ const AdminIndex = () => {
   });
 
   const { data: bookings = [] } = useQuery({
-    queryKey: ['bookings'],enabled: !!token, staleTime: 5000, refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    queryKey: ['bookings'],enabled: !!token, 
     queryFn: async () => {
       const res = await getApiBooking(
         { page: 1, pageSize: 100 }, 
@@ -107,6 +104,7 @@ const AdminIndex = () => {
           (b.salonName || b.SalonName) === userSalonName
         );
       }
+
       return filteredBookings.map((b: any, index: number) => {
         let amount = 0;
         const status = (b.status || b.Status || "").toLowerCase();
@@ -123,7 +121,7 @@ const AdminIndex = () => {
         };
       });
     }
-  });
+  }); 
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
   const monthlyData = (() => {

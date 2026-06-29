@@ -8,27 +8,29 @@ import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { getAllUsers: getApiUser, getAllStaff: getApiStaff, updateUser: putApiUserId, registerEmployee: postApiUserRegisterEmployee, registerCustomer: postApiUserRegisterCustomer, deleteUser: deleteApiUserId } = getSalonBookingAPI();
 const { Option } = Select;
+
 const SuperAdminUser = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
   const token = localStorage.getItem("authToken");
+  
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   };
+
   const ResponseData = (response: any) => {
     if (!response) return null;
     if (typeof response.data === 'string') {
@@ -40,6 +42,7 @@ const SuperAdminUser = () => {
     }
     return response.data;
   };
+
   const resetModal = () => {
     setModalVisible(false);
     setEditingUser(null);
@@ -47,7 +50,7 @@ const SuperAdminUser = () => {
   };
 
   const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffList'],staleTime: 3000,refetchOnWindowFocus: false,refetchOnMount: false,
+    queryKey: ['staffList'],
     queryFn: async () => {
       const response = await getApiStaff(undefined, axiosConfig);
       const parsedData = ResponseData(response);
@@ -63,8 +66,9 @@ const SuperAdminUser = () => {
     },
   });
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading,} = useInfiniteQuery({
-    queryKey: ['allUsers', roleFilter, statusFilter, searchInput], staleTime: 5000, refetchOnMount: false, refetchOnWindowFocus: false, initialPageParam: 1,
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading, isFetching } = useInfiniteQuery({
+    queryKey: ['allUsers', roleFilter, statusFilter],
+    initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       try {
         const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
@@ -120,13 +124,7 @@ const SuperAdminUser = () => {
             return true;
           });
         }
-        if (searchInput) {
-          const searchLower = searchInput.toLowerCase();
-          finalData = finalData.filter((u: any) =>
-            u.fullName?.toLowerCase().includes(searchLower) ||
-            u.email?.toLowerCase().includes(searchLower)
-          );
-        }
+
         const totalCount = pagination?.totalCount || finalData.length;
         const hasNext = pagination?.hasNextPage || false;
         return {
@@ -177,6 +175,18 @@ const SuperAdminUser = () => {
   const allUsers = useMemo(() => {
     return infiniteData?.pages?.flatMap(page => page.data) || [];
   }, [infiniteData]);
+
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allUsers,
+    ['fullName', 'email'],
+    500
+  );
+
+  const filteredUsers = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
+
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
   const staffList = useMemo(() => {
     return (staffData || []).map((s: any) => ({
@@ -304,10 +314,6 @@ const SuperAdminUser = () => {
     deleteUserMutation.mutate(record.id);
   };
 
-  const handleSearch = () => {
-    setSearchInput(searchTerm);
-  };
-
   const getRoleLabel = (role: number) => {
     if (role === 1) return "SuperAdmin";
     if (role === 2) return "Admin";
@@ -359,6 +365,11 @@ const SuperAdminUser = () => {
         <div>
           <h1 className="text-2xl font-bold">User Management</h1>
           <p className="text-gray-600">Manage All users</p>
+          {totalCount > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {filteredUsers.length} of {totalCount} users
+            </p>
+          )}
         </div>
         <Button
           type="primary"
@@ -380,9 +391,8 @@ const SuperAdminUser = () => {
             placeholder="Search users..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onPressEnter={handleSearch}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
           <Select
@@ -407,9 +417,17 @@ const SuperAdminUser = () => {
           </Select>
         </div>
       </Card>
+
       <Card>
+        <div className="mb-4 flex justify-between items-center">
+          <div className="p-2">
+            All Users Data
+            {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
+          </div>
+        </div>
+
         <DataTable
-          data={allUsers}
+          data={filteredUsers}
           columns={columns}
           loading={isLoading}
           onEdit={(record: any) => {
@@ -427,6 +445,7 @@ const SuperAdminUser = () => {
           showActions={true}
           rowKey="key"
         />
+
         <div ref={loadMoreRef} className="py-4">
           {isFetchingNextPage && (
             <div className="text-center py-4">
@@ -434,7 +453,7 @@ const SuperAdminUser = () => {
               <p className="mt-2 text-gray-500">Loading more users...</p>
             </div>
           )}
-          {!hasNextPage && allUsers.length === 0 && !isLoading && (
+          {!hasNextPage && filteredUsers.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No users found
             </div>

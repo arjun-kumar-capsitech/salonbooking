@@ -60,7 +60,7 @@ const CustomerBookings: React.FC = () => {
   };
 
   const { data: referenceData, isLoading: referenceLoading } = useQuery({
-    queryKey: ['customerReferenceData'],staleTime: 30000,refetchOnWindowFocus: false,
+    queryKey: ['customerReferenceData'],
     queryFn: async () => {
       try {
         let users: any[] = [];
@@ -98,15 +98,6 @@ const CustomerBookings: React.FC = () => {
           });
         }
 
-        const hardcodedStaff: Record<string, string> = {
-          '6a0c27e6e4598fcfa3d4d72d': 'Jayesh',
-        };
-        Object.entries(hardcodedStaff).forEach(([id, name]) => {
-          if (!staffMap[id]) {
-            staffMap[id] = name;
-          }
-        });
-
         services.forEach((s: any) => {
           const id = String(s.id || s._id);
           const name = s.serviceName || s.ServiceName || s.name || s.Name || 'Unknown Service';
@@ -121,8 +112,7 @@ const CustomerBookings: React.FC = () => {
   });
 
   const {data: infiniteData,fetchNextPage,hasNextPage,isFetchingNextPage,isLoading: loading,isFetching,} = useInfiniteQuery({
-    queryKey: ['customerBookingsList'], refetchOnWindowFocus: false,
-    initialPageParam: 1,
+    queryKey: ['customerBookingsList'], initialPageParam: 1,
     enabled: !!token && !!referenceData,
     queryFn: async ({ pageParam = 1 }) => {
       try {

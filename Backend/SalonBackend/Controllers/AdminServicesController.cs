@@ -15,7 +15,7 @@ namespace SalonBackend.Controllers
             _adminService = adminService;
         }
 
-        [HttpGet]
+        [HttpGet] 
         public async Task<ActionResult<ApiResponse<List<AdminServices>>>> GetAllServices()
         {
             try
@@ -158,7 +158,6 @@ namespace SalonBackend.Controllers
                 existing.SalonName = dto.SalonName;
 
                 await _adminService.UpdateAsync(id, existing);
-
                 return Ok(new ApiResponse<AdminServices>
                 {
                     Status = true,

@@ -6,14 +6,14 @@ import Modals from "../../Components/Ui/Modals";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const {getAllBooking: getApiBooking,getAllStaff: getApiStaff,   getAllServices: getApiAdminServices,   updateStatus: putApiBookingId } = getSalonBookingAPI();
+const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId } = getSalonBookingAPI();
+
 const EmployeeService = () => {
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [searchText, setSearchText] = useState("");
-  const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [serviceProgress, setServiceProgress] = useState(0);
   const [progressInterval, setProgressInterval] = useState<number | null>(null);
@@ -64,8 +64,8 @@ const EmployeeService = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeServiceStaff'],enabled: !!token,staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['employeeServiceStaff'],
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       return extractData(res);
@@ -80,7 +80,8 @@ const EmployeeService = () => {
   const staffId = currentStaff?.id || currentStaff?._id;
 
   const { data: servicesData = [] } = useQuery({
-    queryKey: ['employeeServiceServices'], enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
+    queryKey: ['employeeServiceServices'],
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       return extractData(res);
@@ -99,9 +100,9 @@ const EmployeeService = () => {
     return map;
   }, [servicesData]);
 
-  const {data: infiniteData,  fetchNextPage,  hasNextPage,  isFetchingNextPage,  isLoading: loading,  isFetching,} = useInfiniteQuery({
-    queryKey: ['employeeServicesList', staffId, statusFilter, searchInput],
-    enabled: !!token && !!staffId,refetchOnWindowFocus: false,
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
+    queryKey: ['employeeServicesList', staffId, statusFilter],
+    enabled: !!token && !!staffId,
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const res = await getApiBooking({ page: pageParam, pageSize: 5 }, axiosConfig);
@@ -118,6 +119,7 @@ const EmployeeService = () => {
 
       let rawBookings = parsedData.result.data;
       const pagination = parsedData.result.pagination;
+      
       rawBookings = rawBookings.filter((b: any) => {
         const bookingStaffId = String(b.staffId || b.StaffId);
         return bookingStaffId === String(staffId);
@@ -130,21 +132,11 @@ const EmployeeService = () => {
         });
       }
 
-      if (searchInput) {
-        const searchLower = searchInput.toLowerCase();
-        rawBookings = rawBookings.filter((b: any) => {
-          const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || '';
-          const serviceId = String(b.serviceId || b.ServiceId);
-          const serviceName = serviceMap[serviceId]?.name || '';
-          return customerName.toLowerCase().includes(searchLower) ||
-            serviceName.toLowerCase().includes(searchLower);
-        });
-      }
-
       const transformedBookings = rawBookings.map((b: any, index: number) => {
         const serviceId = String(b.serviceId || b.ServiceId);
         const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || "Customer";
         const serviceInfo = serviceMap[serviceId] || { name: "N/A", duration: 30 };
+        
         let status = (b.status || b.Status || "pending").toLowerCase();
         if (status === "complete") status = "completed";
 
@@ -199,9 +191,19 @@ const EmployeeService = () => {
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const bookings = useMemo(() => {
+  const allBookings = useMemo(() => {
     return infiniteData?.pages?.flatMap((page) => page.data) || [];
   }, [infiniteData]);
+
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allBookings,
+    ['customerName', 'serviceName'],
+    500
+  );
+
+  const filteredBookings = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
 
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
@@ -213,9 +215,7 @@ const EmployeeService = () => {
       message.success("Service completed successfully!");
       if (progressInterval) clearInterval(progressInterval);
       queryClient.invalidateQueries({ queryKey: ['employeeServicesList'] });
-      setModalVisible(false);
-      setSelectedBooking(null);
-      setServiceProgress(0);
+      handleCloseModal();
     },
     onError: (error: any) => {
       message.error(error?.response?.data?.message || "Failed to complete service");
@@ -253,14 +253,6 @@ const EmployeeService = () => {
     setSelectedBooking(null);
     setServiceProgress(0);
   };
-
-  const handleSearch = () => {
-    setSearchInput(searchText);
-  };
-
-  const filteredBookings = useMemo(() => {
-    return bookings;
-  }, [bookings]);
 
   const columns = [
     { 
@@ -323,30 +315,28 @@ const EmployeeService = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">My Service Tasks</h1>
-        <p className="text-gray-500">Manage your assigned service tasks</p>
-        {totalCount > 0 && (
-          <p className="text-sm text-gray-400 mt-1">
-            Showing {bookings.length} of {totalCount} tasks
-          </p>
-        )}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">My Service Tasks</h1>
+          <p className="text-gray-600">Manage your assigned service tasks</p>
+          {totalCount > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {filteredBookings.length} of {totalCount} tasks
+            </p>
+          )}
+        </div>
       </div>
 
-      <Card className="shadow-sm border border-gray-100 rounded-xl mb-6">
+      <Card className="mb-6">
         <div className="flex gap-4 flex-wrap">
           <Input 
             placeholder="Search by customer or service..." 
             prefix={<SearchOutlined />} 
+            style={{ width: 300 }}
             value={searchText} 
             onChange={(e) => setSearchText(e.target.value)} 
-            onPressEnter={handleSearch}
-            style={{ width: 300 }} 
             allowClear
           />
-          <Button type="primary" onClick={handleSearch}>
-            Search
-          </Button>
           <Select
             style={{ width: 140 }}
             value={statusFilter}
@@ -358,18 +348,15 @@ const EmployeeService = () => {
             <Option value="cancelled">Cancelled</Option>
             <Option value="pending">Pending</Option>
           </Select>
-          <div className="text-gray-500 flex items-center">
-            Showing {filteredBookings.length} tasks
-          </div>
         </div>
       </Card>
 
-      <Card className="shadow-sm border border-gray-100 rounded-xl">
+      <Card>
         <div className="mb-4 flex justify-between items-center">
-          <p className="p-2 font-medium">
+          <div className="p-2">
             My Tasks
             {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
-          </p>
+          </div>
         </div>
 
         <DataTable 
@@ -387,7 +374,7 @@ const EmployeeService = () => {
               <p className="mt-2 text-gray-500">Loading more tasks...</p>
             </div>
           )}
-          {!hasNextPage && bookings.length === 0 && !isLoading && (
+          {!hasNextPage && filteredBookings.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No tasks found
             </div>
@@ -402,6 +389,7 @@ const EmployeeService = () => {
         onSubmit={handleCompleteService} 
         submitText={serviceProgress >= 100 ? "Complete Service" : "Please Wait..."}
         loading={completeServiceMutation.isPending}
+        cancelText="Close"
       >
         {selectedBooking && (
           <div className="space-y-6">

@@ -6,7 +6,25 @@ import { useMutation } from "@tanstack/react-query";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const {  login:postApiUserLogin } = getSalonBookingAPI();
+const { login: postApiUserLogin } = getSalonBookingAPI();
+
+interface User {
+  id: string;
+  email: string;
+  role: number;
+  fullName?: string;
+  salonName?: string;
+  [key: string]: any;
+}
+
+interface LoginResponse {
+  status: boolean;
+  message?: string;
+  result?: {
+    user: User;
+    token: string;
+  };
+}
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -29,37 +47,45 @@ function Login() {
     }
     return "";
   };
+
   const isFormValid = () => {
     const emailError = validateField("email", formData.email);
     const passwordError = validateField("password", formData.password);
     return !emailError && !passwordError;
   };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (submitted) setError("");
   };
+
   const loginMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await postApiUserLogin({
         email: data.email,
         password: data.password,
       });
-      return response.data;
+      return response.data as LoginResponse;
     },
-    onSuccess: (data) => {
-      if (!data.status) {
-        setError(data.message || "Login failed");
+    onSuccess: (data: LoginResponse) => {
+      if (!data) {
+        setError("No response from server");
         return;
       }
-      const result = data.result as { user: any; token: string };
-      if (!result?.user) {
+
+      if (data.status === false) {
+        setError(data.message || "Invalid email or password");
+        return;
+      }
+
+      if (!data.result?.user || !data.result?.token) {
         setError("Invalid response from server");
         return;
       }
-      
-      const user = result.user;
-      const token = result.token;
+
+      const user = data.result.user;
+      const token = data.result.token;
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
@@ -85,7 +111,13 @@ function Login() {
     },
     onError: (err: any) => {
       console.error("Login error:", err);
-      setError("Server error. Please try again.");
+      if (err?.response?.data?.message) {
+        setError(err.response.data.message);
+      } else if (err?.message) {
+        setError(err.message);
+      } else {
+        setError("Server error. Please try again.");
+      }
     }
   });
 
@@ -127,7 +159,7 @@ function Login() {
               onChange={handleChange}
               className={`w-full px-4 py-3 border rounded-lg ${
                 emailError ? "border-red-500" : "border-gray-300"
-              }`}
+              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
               disabled={isLoading}
             />
             {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
@@ -143,12 +175,12 @@ function Login() {
                 onChange={handleChange}
                 className={`w-full px-4 py-3 border rounded-lg pr-12 ${
                   passwordError ? "border-red-500" : "border-gray-300"
-                }`}
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 disabled={isLoading}
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
               >
@@ -160,7 +192,7 @@ function Login() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
           >
             {isLoading ? "Signing in..." : "Sign in"}

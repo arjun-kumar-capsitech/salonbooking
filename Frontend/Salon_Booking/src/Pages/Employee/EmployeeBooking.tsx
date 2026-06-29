@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Card, Button, Input, message, Tag, Spin } from "antd";
+import { Card, Button, Input, message, Tag, Spin, Select } from "antd";
 import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import Modals from "../../Components/Ui/Modals";
 import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
+const { Option } = Select;
 const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId } = getSalonBookingAPI();
 
 interface BookingType {
@@ -25,8 +27,7 @@ interface BookingType {
 const EmployeeBooking: React.FC = () => {
   const [selectedBooking, setSelectedBooking] = useState<BookingType | null>(null);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [searchText, setSearchText] = useState<string>("");
-  const [searchInput, setSearchInput] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
@@ -73,8 +74,8 @@ const EmployeeBooking: React.FC = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeStaffList'], enabled: !!token,staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['employeeStaffList'], 
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       return extractData(res);
@@ -91,8 +92,6 @@ const EmployeeBooking: React.FC = () => {
   const { data: servicesData = [] } = useQuery({
     queryKey: ['employeeServices'],
     enabled: !!token,
-    staleTime: 5000,
-    refetchOnWindowFocus: false,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       return extractData(res);
@@ -109,9 +108,9 @@ const EmployeeBooking: React.FC = () => {
     return map;
   }, [servicesData]);
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching, } = useInfiniteQuery({
-    queryKey: ['employeeBookingsList', staffId, searchInput],
-    enabled: !!token && !!staffId,refetchOnWindowFocus: false,
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
+    queryKey: ['employeeBookingsList', staffId, statusFilter],
+    enabled: !!token && !!staffId,
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const res = await getApiBooking({ page: pageParam, pageSize: 5 }, axiosConfig);
@@ -134,20 +133,19 @@ const EmployeeBooking: React.FC = () => {
         return bookingStaffId === String(staffId);
       });
 
-      if (searchInput) {
-        const searchLower = searchInput.toLowerCase();
+      if (statusFilter !== 'all') {
         rawBookings = rawBookings.filter((b: any) => {
-          const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || '';
-          const serviceId = String(b.serviceId || b.ServiceId);
-          const serviceName = serviceMap[serviceId] || '';
-          return customerName.toLowerCase().includes(searchLower) ||
-            serviceName.toLowerCase().includes(searchLower);
+          const status = (b.status || b.Status || "").toLowerCase();
+          return status === statusFilter.toLowerCase();
         });
       }
 
       const transformedBookings = rawBookings.map((b: any, index: number): BookingType => {
         const serviceId = String(b.serviceId || b.ServiceId);
         const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || "Customer";
+
+        let status = (b.status || b.Status || "pending").toLowerCase();
+        if (status === "complete") status = "completed";
 
         return {
           key: b._id || b.id || `${pageParam}-${index}`,
@@ -158,7 +156,7 @@ const EmployeeBooking: React.FC = () => {
           date: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY"),
           time: dayjs(b.appointmentDate || b.AppointmentDate).format("hh:mm A"),
           amount: b.amount || b.Amount || 0,
-          status: (b.status || b.Status || "pending").toLowerCase(),
+          status: status,
           salonName: b.salonName || b.SalonName || "N/A",
         };
       });
@@ -201,9 +199,19 @@ const EmployeeBooking: React.FC = () => {
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const bookings = useMemo(() => {
+  const allBookings = useMemo(() => {
     return infiniteData?.pages?.flatMap((page) => page.data) || [];
   }, [infiniteData]);
+
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allBookings,
+    ['customerName', 'serviceName'],
+    500
+  );
+
+  const filteredBookings = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
 
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
@@ -227,14 +235,6 @@ const EmployeeBooking: React.FC = () => {
       updateStatusMutation.mutate({ id: selectedBooking.id, status: newStatus });
     }
   };
-
-  const handleSearch = () => {
-    setSearchInput(searchText);
-  };
-
-  const filteredBookings = useMemo((): BookingType[] => {
-    return bookings;
-  }, [bookings]);
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -295,39 +295,47 @@ const EmployeeBooking: React.FC = () => {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">My Assigned Bookings</h1>
-        <p className="text-gray-500">View and manage your assigned appointments</p>
-        {totalCount > 0 && (
-          <p className="text-sm text-gray-400 mt-1">
-            Showing {bookings.length} of {totalCount} bookings
-          </p>
-        )}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">My Assigned Bookings</h1>
+          <p className="text-gray-600">View and manage your assigned appointments</p>
+          {totalCount > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Showing {filteredBookings.length} of {totalCount} bookings
+            </p>
+          )}
+        </div>
       </div>
 
-      <Card className="shadow-sm border border-gray-100 rounded-xl mb-6">
+      <Card className="mb-6">
         <div className="flex gap-4">
           <Input
             placeholder="Search by customer or service..."
             prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
-            onPressEnter={handleSearch}
             style={{ width: 300 }}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
-          <Button type="primary" onClick={handleSearch}>
-            Search
-          </Button>
+          <Select
+            style={{ width: 120 }}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          >
+            <Option value="all">All Status</Option>
+            <Option value="confirmed">Confirmed</Option>
+            <Option value="completed">Completed</Option>
+            <Option value="cancelled">Cancelled</Option>
+          </Select>
         </div>
       </Card>
 
-      <Card className="shadow-sm border border-gray-100 rounded-xl">
+      <Card>
         <div className="mb-4 flex justify-between items-center">
-          <p className="p-2 font-medium">
+          <div className="p-2">
             My Bookings
             {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
-          </p>
+          </div>
         </div>
 
         <DataTable
@@ -349,7 +357,7 @@ const EmployeeBooking: React.FC = () => {
               <p className="mt-2 text-gray-500">Loading more bookings...</p>
             </div>
           )}
-          {!hasNextPage && bookings.length === 0 && !isLoading && (
+          {!hasNextPage && filteredBookings.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No bookings found
             </div>
@@ -431,4 +439,5 @@ const EmployeeBooking: React.FC = () => {
     </div>
   );
 };
+
 export default EmployeeBooking;

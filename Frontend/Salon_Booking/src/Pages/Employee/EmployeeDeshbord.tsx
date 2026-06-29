@@ -50,7 +50,7 @@ const EmployeeDashboard = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeStaffDashboard'], enabled: !!token, staleTime: 5000, refetchOnWindowFocus: false,
+    queryKey: ['employeeStaffDashboard'], enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       return extractData(res);
@@ -65,10 +65,7 @@ const EmployeeDashboard = () => {
   const staffId: string = currentStaff?.id || currentStaff?._id;
 
   const { data: servicesData = [] } = useQuery({
-    queryKey: ['employeeServicesDashboard'],
-    enabled: !!token,
-    staleTime: 5000,
-    refetchOnWindowFocus: false,
+    queryKey: ['employeeServicesDashboard'], enabled: !!token,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       return extractData(res);
@@ -85,20 +82,14 @@ const EmployeeDashboard = () => {
     return map;
   }, [servicesData]);
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching,} = useInfiniteQuery({
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching, } = useInfiniteQuery({
     queryKey: ['employeeDashboardBookings', staffId],
-    enabled: !!token && !!staffId,  refetchOnWindowFocus: false,  initialPageParam: 1,
+    enabled: !!token && !!staffId, initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const res = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
       const parsedData = ResponseData(res);
-
       if (!parsedData?.status === true || !parsedData?.result?.data) {
-        return {
-          data: [],
-          totalCount: 0,
-          hasNextPage: false,
-          nextPage: pageParam + 1,
-        };
+        return { data: [], totalCount: 0, hasNextPage: false, nextPage: pageParam + 1, };
       }
 
       let rawBookings = parsedData.result.data;
@@ -240,14 +231,14 @@ const EmployeeDashboard = () => {
       </Row>
 
       <div className="flex gap-4 mb-4">
-        <Button 
-          type={activeTab === "today" ? "primary" : "default"} 
+        <Button
+          type={activeTab === "today" ? "primary" : "default"}
           onClick={() => setActiveTab("today")}
         >
           Today's Appointments
         </Button>
-        <Button 
-          type={activeTab === "upcoming" ? "primary" : "default"} 
+        <Button
+          type={activeTab === "upcoming" ? "primary" : "default"}
           onClick={() => setActiveTab("upcoming")}
         >
           Upcoming Appointments
@@ -262,12 +253,12 @@ const EmployeeDashboard = () => {
           </p>
         </div>
 
-        <DataTable 
-          data={getBookings()} 
-          columns={columns} 
-          loading={isLoading} 
-          showActions={false} 
-          rowKey="key" 
+        <DataTable
+          data={getBookings()}
+          columns={columns}
+          loading={isLoading}
+          showActions={false}
+          rowKey="key"
         />
 
         <div ref={loadMoreRef} className="py-4">

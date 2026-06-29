@@ -7,14 +7,7 @@ import { getSalonBookingAPI } from '../../api/generated';
 
 const { TabPane } = Tabs;
 
-const { 
-  getUserById: getApiUserId,
-  updateUser: putApiUserId,
-  getAll: getApiTime,
-  createOrUpdate: postApiTime,
-  update: putApiTimeDay
-} = getSalonBookingAPI();
-
+const {  getUserById: getApiUserId, updateUser: putApiUserId, getAll: getApiTime, createOrUpdate: postApiTime, update: putApiTimeDay} = getSalonBookingAPI();
 interface DayTiming {
   id?: string;
   day: string;
@@ -61,8 +54,7 @@ const Settings = () => {
   };
   
   const { data: userData, isLoading: userLoading } = useQuery({
-    queryKey: ['user', loginUser?.id],staleTime: 5000,refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    queryKey: ['user', loginUser?.id],
     enabled: !!loginUser?.id && !!token,
     queryFn: async () => {
       const response = await getApiUserId(loginUser.id, axiosConfig);
@@ -287,5 +279,4 @@ const Settings = () => {
     </div>
   );
 };
-
 export default Settings;

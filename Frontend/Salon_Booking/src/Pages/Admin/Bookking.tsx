@@ -3,21 +3,20 @@ import { SearchOutlined } from '@ant-design/icons';
 import { Scissors } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
-import { DataTable} from '../../Components/Ui/Table';
+import { DataTable } from '../../Components/Ui/Table';
 import { SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from 'dayjs';
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const {getAllBooking: getApiBooking, getAllUsers: getApiUser, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId} = getSalonBookingAPI();
+const { getAllBooking: getApiBooking, getAllUsers: getApiUser, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId } = getSalonBookingAPI();
 const Bookings = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBooking, setEditingBooking] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
@@ -29,6 +28,7 @@ const Bookings = () => {
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
   const isCustomer = userRole === "Customer" || userRole === 4;
+
   const axiosConfig = {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -69,7 +69,7 @@ const Bookings = () => {
   };
 
   const { data: referenceData, isLoading: referenceLoading } = useQuery({
-    queryKey: ['referenceData'], staleTime: 30000, refetchOnWindowFocus: false,
+    queryKey: ['referenceData'],
     queryFn: async () => {
       try {
         const [userRes, staffRes, serviceRes] = await Promise.all([
@@ -127,9 +127,8 @@ const Bookings = () => {
     },
   });
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching,} = useInfiniteQuery({
-    queryKey: ['bookings', statusFilter, searchInput],
-    refetchOnWindowFocus: false,
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
+    queryKey: ['bookings', statusFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       try {
@@ -137,11 +136,11 @@ const Bookings = () => {
         const parsedData = ResponseData(response);
 
         if (!parsedData?.status === true || !parsedData?.result?.data) {
-          return { 
-            data: [], 
-            totalCount: 0, 
-            hasNextPage: false, 
-            nextPage: pageParam + 1 
+          return {
+            data: [],
+            totalCount: 0,
+            hasNextPage: false,
+            nextPage: pageParam + 1
           };
         }
 
@@ -156,15 +155,6 @@ const Bookings = () => {
           rawBookings = rawBookings.filter((b: any) =>
             (b.salonName || b.SalonName) === userSalonName
           );
-        }
-
-        if (searchInput) {
-          const searchLower = searchInput.toLowerCase();
-          rawBookings = rawBookings.filter((b: any) => {
-            const customerId = String(b.customerId || b.CustomerId);
-            const customerName = referenceData?.customerMap?.[customerId] || '';
-            return customerName.toLowerCase().includes(searchLower);
-          });
         }
 
         if (statusFilter !== 'all') {
@@ -250,8 +240,17 @@ const Bookings = () => {
     return infiniteData?.pages?.flatMap((page) => page.data) || [];
   }, [infiniteData]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allBookings,
+    ['customerName'],
+    500
+  );
 
+  const filteredBookings = useMemo(() => {
+    return searchFilteredData || [];
+  }, [searchFilteredData]);
+
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
   const updateBookingMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       await putApiBookingId(id, { status }, axiosConfig);
@@ -282,10 +281,6 @@ const Bookings = () => {
     return record.status !== 'completed' && record.status !== 'cancelled';
   };
 
-  const handleSearch = () => {
-    setSearchInput(searchTerm);
-  };
-
   const isLoading = (loading && !infiniteData) || referenceLoading;
   return (
     <div className="p-6">
@@ -295,7 +290,7 @@ const Bookings = () => {
           <p className="text-sm text-gray-500 mt-1">Manage All Bookings</p>
           {totalCount > 0 && (
             <p className="text-sm text-gray-500 mt-1">
-              Showing {allBookings.length} of {totalCount} bookings
+              Showing {filteredBookings.length} of {totalCount} bookings
             </p>
           )}
         </div>
@@ -307,9 +302,8 @@ const Bookings = () => {
             placeholder="Search customer..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onPressEnter={handleSearch}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
           <Select
@@ -334,7 +328,7 @@ const Bookings = () => {
         </div>
 
         <DataTable
-          data={allBookings}
+          data={filteredBookings}
           loading={isLoading}
           onEdit={(record: any) => {
             if (!canEdit(record)) {
@@ -356,7 +350,7 @@ const Bookings = () => {
               <p className="mt-2 text-gray-500">Loading more bookings...</p>
             </div>
           )}
-          {!hasNextPage && allBookings.length === 0 && !isLoading && (
+          {!hasNextPage && filteredBookings.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No bookings found
             </div>

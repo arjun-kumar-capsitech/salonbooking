@@ -8,17 +8,15 @@ import { InputField, SelectField } from '../../Components/Ui/Forms';
 import ModalForm from '../../Components/Ui/Modals';
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
+import { useSearch } from '../../utils/FilterData';
 
 const { getAllStaff: getApiStaff, createStaff: postApiStaff, updateStaff: putApiStaffId, deleteStaff: deleteApiStaffId, registerEmployee: postApiUserRegisterEmployee } = getSalonBookingAPI();
 const { Option } = Select;
-
 const Staff = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
   const [form] = Form.useForm();
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [searchInput, setSearchInput] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({ name: '', email: '', password: '' });
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -72,19 +70,23 @@ const Staff = () => {
     }
   };
 
-  const resetModal = () => {
-    setModalVisible(false);
-    setEditingStaff(null);
-    form.resetFields();
+  const resetModal = () => {setModalVisible(false);setEditingStaff(null);form.resetFields();
     setSubmitted(false);
     setFieldErrors({ name: '', email: '', password: '' });
   };
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
-    queryKey: ['staff', statusFilter, searchInput],refetchOnWindowFocus: false,
+  const { data: infiniteData, fetchNextPage, hasNextPage,isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
+    queryKey: ['staff', statusFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
-      const response = await getApiStaff({ page: pageParam, pageSize: 4 }, axiosConfig);
+      const response = await getApiStaff(
+        { 
+          page: pageParam, 
+          pageSize: 4
+        }, 
+        axiosConfig
+      );
+      
       const parsedData = ResponseData(response);
       if (!parsedData?.status === true || !parsedData?.result?.data) {
         return {
@@ -117,18 +119,8 @@ const Staff = () => {
         salonName: s.salonName || s.SalonName || 'Unknown'
       }));
 
-      let filteredData = transformedStaff;
-      if (statusFilter !== 'all') {
-        filteredData = filteredData.filter((s: any) => s.status === statusFilter);
-      }
-      if (searchInput) {
-        filteredData = filteredData.filter((s: any) =>
-          s.name?.toLowerCase().includes(searchInput.toLowerCase())
-        );
-      }
-
       return {
-        data: filteredData,
+        data: transformedStaff,
         totalCount: pagination?.totalCount || 0,
         hasNextPage: pagination?.hasNextPage || false,
         nextPage: pageParam + 1,
@@ -164,8 +156,21 @@ const Staff = () => {
     return infiniteData?.pages?.flatMap(page => page.data) || [];
   }, [infiniteData]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+    allStaff,
+    ['name', 'email'],
+    500
+  );
 
+  const filteredStaff = useMemo(() => {
+    let result = searchFilteredData || [];
+    if (statusFilter !== 'all') {
+      result = result.filter((s: any) => s.status === statusFilter);
+    }
+    return result;
+  }, [searchFilteredData, statusFilter]);
+
+  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
   const addStaffMutation = useMutation({
     mutationFn: async (payload: any) => {
       const staffResponse = await postApiStaff(payload, axiosConfig);
@@ -237,9 +242,7 @@ const Staff = () => {
     const nameError = validateField("name", values.name, isEdit);
     const emailError = validateField("email", values.email, isEdit);
     const passwordError = validateField("password", values.Password, isEdit);
-
     setFieldErrors({ name: nameError, email: emailError, password: passwordError });
-
     if (nameError || emailError || passwordError) {
       return;
     }
@@ -264,10 +267,6 @@ const Staff = () => {
   const handleDelete = (record: any) => {
     if (isCustomer || !record.id) return;
     deleteStaffMutation.mutate(record.id);
-  };
-
-  const handleSearch = () => {
-    setSearchInput(searchTerm);
   };
 
   const columns = [
@@ -324,12 +323,11 @@ const Staff = () => {
       <Card className="mb-6">
         <div className="flex gap-4">
           <Input
-            placeholder="Search staff..."
+            placeholder="Search staff by name or email..."
             prefix={<SearchOutlined />}
             style={{ width: 300 }}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onPressEnter={handleSearch}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
             allowClear
           />
           <Select
@@ -353,7 +351,7 @@ const Staff = () => {
         </div>
 
         <DataTable
-          data={allStaff}
+          data={filteredStaff}
           columns={columns}
           loading={loading && !infiniteData}
           onEdit={!isCustomer ? (record) => {
@@ -381,13 +379,13 @@ const Staff = () => {
             </div>
           )}
 
-          {!hasNextPage && allStaff.length > 0 && allStaff.length === totalCount && (
+          {!hasNextPage && filteredStaff.length > 0 && filteredStaff.length === totalCount && (
             <div className="text-center py-4 text-green-600">
-              All {totalCount} staff members loaded successfully!
+              ✅ All {totalCount} staff members loaded successfully!
             </div>
           )}
 
-          {!hasNextPage && allStaff.length === 0 && !loading && (
+          {!hasNextPage && filteredStaff.length === 0 && !loading && (
             <div className="text-center py-8 text-gray-500">
               No staff members found
             </div>

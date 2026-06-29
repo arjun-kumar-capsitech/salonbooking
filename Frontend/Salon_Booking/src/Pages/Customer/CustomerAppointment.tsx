@@ -66,7 +66,7 @@ const CustomerAppointment: React.FC = () => {
   const getRandomReviews = () => Math.floor(Math.random() * 500) + 10;
 
   const { data: servicesApiData = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['customerServices'],enabled: !!token,refetchOnWindowFocus: false,
+    queryKey: ['customerServices'],enabled: !!token,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       const services = extractData(res);
@@ -75,7 +75,7 @@ const CustomerAppointment: React.FC = () => {
   });
 
   const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['customerStaff'], enabled: !!token, refetchOnWindowFocus: false,
+    queryKey: ['customerStaff'], enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       const staff = extractData(res);
