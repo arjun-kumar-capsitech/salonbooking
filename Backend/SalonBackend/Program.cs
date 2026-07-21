@@ -8,6 +8,7 @@ using Hangfire;
 using Hangfire.Mongo;
 using Hangfire.Mongo.Migration.Strategies;
 using Hangfire.Mongo.Migration.Strategies.Backup;
+using NetEscapades.AspNetCore.SecurityHeaders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -71,6 +72,7 @@ builder.Services.AddScoped<TimeService>();
 builder.Services.AddScoped<CompanyService>();
 
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "your-super-secret-jwt-key-minimum-32-characters-long-here";
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -96,21 +98,44 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.Always;
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+});
+
 var app = builder.Build();
 
-app.UseCors("AllowFrontend");
+var securityHeadersPolicy = new HeaderPolicyCollection()
+    .AddFrameOptionsDeny()
+    .AddContentTypeOptionsNoSniff()
+    .AddXssProtectionEnabled()
+    .AddReferrerPolicyStrictOriginWhenCrossOrigin()
+    .AddStrictTransportSecurityMaxAgeIncludeSubDomains()
+    .AddPermissionsPolicy(builder =>
+    {
+        builder.AddGeolocation().None();
+        builder.AddCamera().None();
+        builder.AddMicrophone().None();
+        builder.AddUsb().None();
+        builder.AddPayment().None();
+        builder.AddFullscreen().Self();
+        builder.AddAutoplay().Self();
+    })
+    .RemoveServerHeader();
 
+app.UseSecurityHeaders(securityHeadersPolicy);
+app.UseCors("AllowFrontend");
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Salon Booking API v1");
     c.RoutePrefix = "swagger";
 });
-
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.UseHangfireDashboard();
 
 RecurringJob.AddOrUpdate<BookingService>(
