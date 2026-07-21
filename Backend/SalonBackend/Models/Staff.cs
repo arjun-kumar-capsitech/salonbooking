@@ -6,11 +6,11 @@
     {
         public class Staff
         {
-            [BsonId]
+            [BsonId]  // abstreaction 
             [BsonRepresentation(BsonType.ObjectId)]
-            public string Id { get; set; } = string.Empty;
+            public string Id { get; set; } = string.Empty; // inharitense 
 
-            private string _name = string.Empty;
+            private string _name = string.Empty;  // encapsulaction 
             [BsonRequired]
             public string Name
             {
@@ -50,7 +50,7 @@
 
             public bool IsActive { get; set; } = true;
 
-        public DateTime JoinedDate { get; set; } = DateTime.UtcNow;
+        public DateTime JoinedDate { get; set; } = DateTime.UtcNow; // inharitense 
         public string SalonName { get; set; } = string.Empty;
         public string? PhoneNumber { get; internal set; }
     }

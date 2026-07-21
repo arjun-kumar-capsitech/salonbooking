@@ -7,8 +7,12 @@ import { getSalonBookingAPI } from '../../api/generated';
 
 const { Step } = Steps;
 const stepsData = ["Services", "Date & Time", "Staff", "Confirm"];
-const { getAllServices: getApiAdminServices, getAllStaff: getApiStaff, getAll: getApiTime, create: postApiBooking } = getSalonBookingAPI();
-
+const { 
+  getApiAdminServices, 
+  getApiStaff, 
+  getApiTime, 
+  postApiBooking 
+} = getSalonBookingAPI();
 const CustomerAppointment: React.FC = () => {
   const [selectedSalon, setSelectedSalon] = useState<string | null>(null);
   const [selectedSalonName, setSelectedSalonName] = useState<string | null>(null);

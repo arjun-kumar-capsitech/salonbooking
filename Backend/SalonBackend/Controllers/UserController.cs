@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
 using SalonBackend.Services;
 using SalonBackend.Models.Dtos;
-using System.Security.Claims;
 
 namespace SalonBackend.Controllers
 {
@@ -36,17 +35,29 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.LoginAsync(request.Email, request.Password);
-                
-                if (result.Success)
+
+                if (result.Success && !string.IsNullOrEmpty(result.Token))
                 {
+                    Response.Cookies.Append("jwt_token", result.Token, new CookieOptions
+                    {
+                        HttpOnly = true,
+                        Secure = true,
+                        SameSite = SameSiteMode.Strict,
+                        Expires = DateTime.UtcNow.AddHours(5),
+                        Path = "/"
+                    });
+
                     return Ok(new ApiResponse<object>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = result
+                        Result = new
+                        {
+                            User = result.User
+                        }
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<object>
                 {
                     Status = false,
@@ -66,6 +77,20 @@ namespace SalonBackend.Controllers
         }
 
         [AllowAnonymous]
+        [HttpPost("logout")]
+        public IActionResult Logout()
+        {
+            Response.Cookies.Delete("jwt_token");
+
+            return Ok(new ApiResponse<object>
+            {
+                Status = true,
+                Message = "Logged out successfully!",
+                Result = null
+            });
+        }
+
+        [AllowAnonymous]
         [HttpPost("register/customer")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterCustomer([FromBody] RegisterCustomerRequest dto)
         {
@@ -82,7 +107,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.RegisterCustomerAsync(dto);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<object>
@@ -92,7 +117,7 @@ namespace SalonBackend.Controllers
                         Result = result
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<object>
                 {
                     Status = false,
@@ -128,7 +153,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.RegisterAdminAsync(dto);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<object>
@@ -138,7 +163,7 @@ namespace SalonBackend.Controllers
                         Result = result
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<object>
                 {
                     Status = false,
@@ -174,7 +199,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.RegisterEmployeeAsync(dto);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<object>
@@ -184,7 +209,7 @@ namespace SalonBackend.Controllers
                         Result = result
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<object>
                 {
                     Status = false,
@@ -220,7 +245,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.RegisterSuperAdminAsync(dto);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<object>
@@ -230,7 +255,7 @@ namespace SalonBackend.Controllers
                         Result = result
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<object>
                 {
                     Status = false,
@@ -308,7 +333,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var user = await _userService.GetUserByIdAsync(id);
-                
+
                 if (user == null)
                 {
                     return NotFound(new ApiResponse<User>
@@ -318,7 +343,7 @@ namespace SalonBackend.Controllers
                         Result = null
                     });
                 }
-                
+
                 return Ok(new ApiResponse<User>
                 {
                     Status = true,
@@ -354,7 +379,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var result = await _userService.UpdateUserAsync(id, dto);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<string>
@@ -364,7 +389,7 @@ namespace SalonBackend.Controllers
                         Result = "Updated"
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<string>
                 {
                     Status = false,
@@ -390,7 +415,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var result = await _userService.DeleteUserAsync(id);
-                
+
                 if (result.Success)
                 {
                     return Ok(new ApiResponse<bool>
@@ -400,7 +425,7 @@ namespace SalonBackend.Controllers
                         Result = true
                     });
                 }
-                
+
                 return BadRequest(new ApiResponse<bool>
                 {
                     Status = false,

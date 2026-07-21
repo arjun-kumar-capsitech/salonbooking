@@ -8,7 +8,7 @@ import logo from "../Imeges/Copilot_20260327_173847.png";
 import { setLogout } from "../../Redux/Store/Slice/authSlice";
 import { resetUserData } from "../../Redux/Store/Slice/userslice";
 import { resetUserContent } from "../../Redux/Store/Slice/userContentSlice";
-import { authData, userData } from "../../Redux/Store/Store";
+import { getSalonBookingAPI } from "../../api/generated"; 
 
 const { Sider, Content } = Layout;
 
@@ -28,13 +28,18 @@ const Deshbord: React.FC<DeshbordProps> = ({
   appName = "Salon Manager",
 }) => {
   const navigate = useNavigate();
-  const location = useLocation();
+  const location = useLocation()
   const dispatch = useDispatch();
   
-  const { user: authUser } = useSelector(authData);
-  const { name, role: userRole } = useSelector(userData);
+  const auth = useSelector((state: any) => state.auth);
+  const user = useSelector((state: any) => state.user);
+  
+  const authUser = auth?.user;
+  const { name, role: userRole } = user || {};
   
   const [collapsed] = React.useState(false);
+
+  const api = getSalonBookingAPI();
 
   useEffect(() => {
     const currentPath = location.pathname;
@@ -77,18 +82,28 @@ const Deshbord: React.FC<DeshbordProps> = ({
     return "U";
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("lastVisitedPath");
-    localStorage.removeItem("redirectAfterLogin");
-    
-    dispatch(setLogout());
-    dispatch(resetUserData());
-    dispatch(resetUserContent());
-    
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      const response = await api.postApiUserLogout({
+        withCredentials: true
+      });
+
+      console.log("Logout successful:", response.data);
+
+    } catch (error) {
+      console.error("Logout API error:", error);
+    } finally {
+      localStorage.removeItem("authToken");
+      localStorage.removeItem("user");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("lastVisitedPath");
+      localStorage.removeItem("redirectAfterLogin");
+      localStorage.removeItem("jwt_token");
+      dispatch(setLogout());
+      dispatch(resetUserData());
+      dispatch(resetUserContent());
+        navigate("/");
+    }
   };
 
   const menuItemsFormatted: MenuProps["items"] = menuItems.map((item) => ({

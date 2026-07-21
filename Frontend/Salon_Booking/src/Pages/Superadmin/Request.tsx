@@ -8,7 +8,7 @@ import { DataTable } from "../../Components/Ui/Table";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { getAllUsers: getApiUser } = getSalonBookingAPI();
+const { getApiUser } = getSalonBookingAPI();
 
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusColor = () => {

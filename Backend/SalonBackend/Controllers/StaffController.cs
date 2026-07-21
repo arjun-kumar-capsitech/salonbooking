@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
 using SalonBackend.Models.Dtos;
 using SalonBackend.Services;
-using System.Security.Claims;
 
 namespace SalonBackend.Controllers
 {
@@ -13,11 +12,10 @@ namespace SalonBackend.Controllers
     public class StaffController : ControllerBase
     {
         private readonly StaffService _staffService;
-        
         public StaffController(StaffService staffService)
         {
             _staffService = staffService;
-        }
+        } 
 
         [HttpGet]
         public async Task<ActionResult<ApiResponse<object>>> GetAllStaff(

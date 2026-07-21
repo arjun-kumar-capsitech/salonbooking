@@ -7,7 +7,7 @@ import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 
-const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices } = getSalonBookingAPI();
+const { getApiBooking, getApiStaff,getApiAdminServices } = getSalonBookingAPI();
 const EmployeeDashboard = () => {
   const [activeTab, setActiveTab] = useState("today");
   const observerRef = useRef<IntersectionObserver | null>(null);

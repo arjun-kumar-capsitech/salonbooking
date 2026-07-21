@@ -7,8 +7,13 @@ import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import { StatCard } from "../../Components/Ui/Cards";
 import { getSalonBookingAPI } from '../../api/generated';
 
-const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, getAllUsers: getApiUser, updateStatus: putApiBookingId } = getSalonBookingAPI();
-
+const { 
+  getApiBooking, 
+  getApiStaff, 
+  getApiAdminServices,
+  getApiUser,
+  putApiBookingId 
+} = getSalonBookingAPI();
 const CustomerBookings: React.FC = () => {
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);

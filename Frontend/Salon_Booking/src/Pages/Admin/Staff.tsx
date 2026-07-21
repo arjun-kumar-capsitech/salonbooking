@@ -10,8 +10,13 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { getAllStaff: getApiStaff, createStaff: postApiStaff, updateStaff: putApiStaffId, deleteStaff: deleteApiStaffId, registerEmployee: postApiUserRegisterEmployee } = getSalonBookingAPI();
-const { Option } = Select;
+const { 
+  getApiStaff, 
+  postApiStaff, 
+  putApiStaffId, 
+  deleteApiStaffId, 
+  postApiUserRegisterEmployee 
+} = getSalonBookingAPI();const { Option } = Select;
 const Staff = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);

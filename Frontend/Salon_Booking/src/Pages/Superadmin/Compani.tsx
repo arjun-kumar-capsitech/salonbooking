@@ -10,7 +10,7 @@ import { DataTable } from "../../Components/Ui/Table";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { getAllUsers: getApiUser, updateUser: putApiUserId, registerAdmin: postApiUserRegisterAdmin, deleteUser: deleteApiUserId } = getSalonBookingAPI();
+const {  getApiUser,  putApiUserId,  postApiUserRegisterAdmin, deleteApiUserId } = getSalonBookingAPI();
 const { confirm } = Modal;
 const Compani = () => {
   const dispatch = useDispatch();

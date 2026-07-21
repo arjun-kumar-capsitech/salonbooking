@@ -8,7 +8,7 @@ import { StatCard } from '../../Components/Ui/Cards'
 import { getSalonBookingAPI } from '../../api/generated'
 
 const { Title, Text } = Typography
-const { getAllUsers: getApiUser, getAllBooking: getApiBooking } = getSalonBookingAPI()
+const {  getApiUser, getApiBooking } = getSalonBookingAPI()
 const SuperAdminDashboard = () => {
   const navigate = useNavigate()
   const token = localStorage.getItem("authToken")

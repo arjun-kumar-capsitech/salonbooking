@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using SalonBackend.Models;
@@ -33,10 +34,10 @@ namespace SalonBackend.Services
         {
             var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
             if (user == null) 
-                return new AuthResult { Success = false, Message = "User not found" };
+                return new AuthResult { Success = false, Message = "Invalid email or password" };
 
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-                return new AuthResult { Success = false, Message = "Invalid password" };
+                return new AuthResult { Success = false, Message = "Invalid email or password" };
 
             if (!user.IsActive)
                 return new AuthResult { Success = false, Message = "Account is deactivated" };
@@ -235,6 +236,11 @@ namespace SalonBackend.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
+        }
+
+        internal async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
+        {
+            throw new NotImplementedException();
         }
     }
 }

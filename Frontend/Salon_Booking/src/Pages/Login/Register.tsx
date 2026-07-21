@@ -4,7 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const { registerCustomer, registerAdmin } = getSalonBookingAPI();
+// API functions extract karo
+const { 
+  postApiUserRegisterCustomer, 
+  postApiUserRegisterAdmin 
+} = getSalonBookingAPI();
+
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -15,9 +20,10 @@ function Register() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     fullName: "", email: "", phoneNo: "",
-    salonName: "", salonAddress: "",password: "",
+    salonName: "", salonAddress: "", password: "",
     confirmPassword: ""
   });
+
   const validateField = (name: string, value: string) => {
     switch (name) {
       case "fullName":
@@ -69,9 +75,10 @@ function Register() {
     return fields.every(field => !validateField(field, formData[field as keyof typeof formData]));
   };
 
+  // Customer Registration Mutation
   const customerRegisterMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await registerCustomer(data);
+      const response = await postApiUserRegisterCustomer(data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -88,9 +95,10 @@ function Register() {
     }
   });
 
+  // Admin Registration Mutation
   const adminRegisterMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await registerAdmin(data);
+      const response = await postApiUserRegisterAdmin(data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -331,4 +339,5 @@ function Register() {
     </div>
   );
 }
+
 export default Register;

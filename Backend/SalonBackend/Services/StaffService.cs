@@ -6,14 +6,14 @@ namespace SalonBackend.Services
 {
     public class StaffService
     {
-        private readonly IMongoCollection<Staff> _staff;
+        private readonly IMongoCollection<Staff> _staff; // encapsulation 
         
         public StaffService(IMongoDatabase database)
         {
             _staff = database.GetCollection<Staff>("Staff");
         }
 
-        public async Task<List<Staff>> GetAllAsync()
+        public async Task<List<Staff>> GetAllAsync() // abstracvtion 
         {
             return await _staff.Find(_ => true).ToListAsync();
         }

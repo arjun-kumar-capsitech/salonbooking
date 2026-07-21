@@ -9,7 +9,7 @@ import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const { getAllBooking: getApiBooking, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId } = getSalonBookingAPI();
+const {  getApiBooking,  getApiStaff,  getApiAdminServices,  putApiBookingId } = getSalonBookingAPI();
 
 const EmployeeService = () => {
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);

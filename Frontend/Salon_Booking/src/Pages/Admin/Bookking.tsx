@@ -11,8 +11,13 @@ import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const { getAllBooking: getApiBooking, getAllUsers: getApiUser, getAllStaff: getApiStaff, getAllServices: getApiAdminServices, updateStatus: putApiBookingId } = getSalonBookingAPI();
-const Bookings = () => {
+const { 
+  getApiBooking, 
+  getApiUser, 
+  getApiStaff, 
+  getApiAdminServices, 
+  putApiBookingId 
+} = getSalonBookingAPI();const Bookings = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingBooking, setEditingBooking] = useState<any>(null);
   const [form] = Form.useForm();

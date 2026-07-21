@@ -8,7 +8,6 @@ export const useDebounce = <T>(value: T, delay: number = 500): T => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-
     timeoutRef.current = setTimeout(() => {
       setDebouncedValue(value);
     }, delay) as unknown as number;

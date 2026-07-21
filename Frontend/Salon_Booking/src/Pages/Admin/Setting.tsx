@@ -7,8 +7,13 @@ import { getSalonBookingAPI } from '../../api/generated';
 
 const { TabPane } = Tabs;
 
-const {  getUserById: getApiUserId, updateUser: putApiUserId, getAll: getApiTime, createOrUpdate: postApiTime, update: putApiTimeDay} = getSalonBookingAPI();
-interface DayTiming {
+const { 
+  getApiUserId, 
+  putApiUserId, 
+  getApiTime, 
+  postApiTime, 
+  putApiTimeDay 
+} = getSalonBookingAPI();interface DayTiming {
   id?: string;
   day: string;
   opening: string;

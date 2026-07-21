@@ -3,7 +3,7 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace SalonBackend.Models
 {
-    public class Company 
+    public class Company
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]

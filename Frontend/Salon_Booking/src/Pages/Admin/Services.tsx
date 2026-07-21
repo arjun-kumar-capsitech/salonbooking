@@ -10,7 +10,13 @@ import ModalForm from '../../Components/Ui/Modals';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const { getAllServices, createService, updateService, deleteService } = getSalonBookingAPI();
+const { 
+  getApiAdminServices, 
+  postApiAdminServices, 
+  putApiAdminServicesId, 
+  deleteApiAdminServicesId 
+} = getSalonBookingAPI();
+
 const Service = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
@@ -77,14 +83,19 @@ const Service = () => {
     }
   };
 
-  const resetModal = () => { setModalVisible(false); setEditingService(null); form.resetFields(); setSubmitted(false);
+  const resetModal = () => { 
+    setModalVisible(false); 
+    setEditingService(null); 
+    form.resetFields(); 
+    setSubmitted(false);
     setFieldErrors({ serviceName: '', price: '', duration: '' });
   };
 
   const { data: services = [], isLoading: loading } = useQuery({
     queryKey: ['service'],
     queryFn: async () => {
-      const response = await getAllServices(axiosConfig);
+      // ✅ getApiAdminServices - SAHI NAME
+      const response = await getApiAdminServices(axiosConfig);
       let servicesData = extractData(response);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
 
@@ -123,8 +134,9 @@ const Service = () => {
   }, [searchFilteredData, statusFilter]);
 
   const addServiceMutation = useMutation({
+    // ✅ postApiAdminServices - SAHI NAME
     mutationFn: async (payload: any) => {
-      const response = await createService(payload, axiosConfig);
+      const response = await postApiAdminServices(payload, axiosConfig);
       return extractData(response);
     },
     onSuccess: () => {
@@ -143,8 +155,9 @@ const Service = () => {
   });
 
   const updateServiceMutation = useMutation({
+    // ✅ putApiAdminServicesId - SAHI NAME
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
-      await updateService(id, payload, axiosConfig);
+      await putApiAdminServicesId(id, payload, axiosConfig);
     },
     onSuccess: () => {
       message.success('Service updated successfully');
@@ -162,8 +175,9 @@ const Service = () => {
   });
 
   const deleteServiceMutation = useMutation({
+    // ✅ deleteApiAdminServicesId - SAHI NAME
     mutationFn: async (id: string) => {
-      await deleteService(id, axiosConfig);
+      await deleteApiAdminServicesId(id, axiosConfig);
     },
     onSuccess: () => {
       message.success('Service deleted successfully');
@@ -380,4 +394,5 @@ const Service = () => {
     </div>
   );
 };
+
 export default Service;

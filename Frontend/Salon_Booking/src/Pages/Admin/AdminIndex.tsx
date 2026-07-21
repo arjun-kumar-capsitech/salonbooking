@@ -6,7 +6,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, Button, Row, Col } from 'antd';
 import { getSalonBookingAPI } from '../../api/generated';
 
-const {  getAllStaff: getApiStaff, getAllServices: getApiAdminServices, getAllBooking: getApiBooking} = getSalonBookingAPI();
+// ✅ Sahi Names - Ye Change Karo
+const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
+
 const AdminIndex = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem("authToken");
@@ -15,9 +17,14 @@ const AdminIndex = () => {
   const userSalonName = user?.SalonName || user?.salonName;
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
+  
+  // ⭐ Token cookie mein hai - localStorage se mat lo!
+  // Token automatic cookie se bheja jayega
+  
   const axiosConfig = {
     headers: {
-      Authorization: `Bearer ${token}`,
+      // ⭐ Token manual bhejna band karo - cookie automatic hai!
+      // Authorization: `Bearer ${token}`,  // ❌ Yeh hatao
     },
   };
 
@@ -32,6 +39,7 @@ const AdminIndex = () => {
     }
     return response.data;
   };
+  
   const extractData = (response: any) => {
     if (!response) return [];
     const parsedData = ResponseData(response);
@@ -40,8 +48,10 @@ const AdminIndex = () => {
     }
     return parsedData.result.data;
   };
+  
   const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'], enabled: !!token,
+    queryKey: ['staff'], 
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff(
         { page: 1, pageSize: 100 },
@@ -65,7 +75,8 @@ const AdminIndex = () => {
   });
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'], enabled: !!token, 
+    queryKey: ['services'], 
+    enabled: !!token, 
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       const parsedData = ResponseData(res);
@@ -91,7 +102,8 @@ const AdminIndex = () => {
   });
 
   const { data: bookings = [] } = useQuery({
-    queryKey: ['bookings'],enabled: !!token, 
+    queryKey: ['bookings'],
+    enabled: !!token, 
     queryFn: async () => {
       const res = await getApiBooking(
         { page: 1, pageSize: 100 }, 
@@ -140,6 +152,7 @@ const AdminIndex = () => {
 
   const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
+  
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
     { title: 'Duration (min)', dataIndex: 'duration' },
@@ -297,4 +310,5 @@ const AdminIndex = () => {
     </div>
   );
 };
+
 export default AdminIndex;

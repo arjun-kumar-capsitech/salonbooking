@@ -7,9 +7,9 @@ namespace SalonBackend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class AdminServicesController : ControllerBase
+    public class AdminServicesController : ControllerBase  // inharitense 
     {
-        private readonly AdminService _adminService;
+        private readonly AdminService _adminService; // encnapsulation 
         public AdminServicesController(AdminService adminService)
         {
             _adminService = adminService;
@@ -20,9 +20,9 @@ namespace SalonBackend.Controllers
         {
             try
             {
-                var services = await _adminService.GetAllAsync();
+                var services = await _adminService.GetAllAsync(); // abstraction 
 
-                return Ok(new ApiResponse<List<AdminServices>>
+                return Ok(new ApiResponse<List<AdminServices>>  // poly. abst. 
                 {
                     Status = true,
                     Message = "Services retrieved successfully",

@@ -6,25 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
 import { getSalonBookingAPI } from "../../api/generated";
 
-const { login: postApiUserLogin } = getSalonBookingAPI();
-
-interface User {
-  id: string;
-  email: string;
-  role: number;
-  fullName?: string;
-  salonName?: string;
-  [key: string]: any;
-}
-
-interface LoginResponse {
-  status: boolean;
-  message?: string;
-  result?: {
-    user: User;
-    token: string;
-  };
-}
+const { postApiUserLogin } = getSalonBookingAPI();
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
@@ -66,9 +48,9 @@ function Login() {
         email: data.email,
         password: data.password,
       });
-      return response.data as LoginResponse;
+      return response.data;
     },
-    onSuccess: (data: LoginResponse) => {
+    onSuccess: (data: any) => {
       if (!data) {
         setError("No response from server");
         return;
@@ -79,27 +61,51 @@ function Login() {
         return;
       }
 
-      if (!data.result?.user || !data.result?.token) {
+      if (!data.result || !data.result.user) {
         setError("Invalid response from server");
         return;
       }
 
       const user = data.result.user;
-      const token = data.result.token;
+      
+      // Try to get token from multiple sources
+      const getCookie = (name: string) => {
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+          const [key, value] = cookie.trim().split('=');
+          if (key === name) return decodeURIComponent(value);
+        }
+        return null;
+      };
+
+      let token = getCookie('jwt_token') || 
+                 getCookie('token') || 
+                 getCookie('authToken') ||
+                 user.id;
+
+      // Store in localStorage
+      localStorage.setItem("user", JSON.stringify(user));
+      localStorage.setItem("jwt_token", token);
+      localStorage.setItem("authToken", token);
+
+      // Dispatch to Redux
+      dispatch(setLogin({ user, token }));
+
+      // Check admin approval status
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
         return;
       }
 
-      dispatch(setLogin({ user, token }));
+      // Navigate based on role
       const redirectPath = localStorage.getItem("redirectAfterLogin");
       localStorage.removeItem("redirectAfterLogin");
 
       const roleRoutes: Record<number, string> = {
-        1: "/super-admin/deshboard",
+        1: "/super-admin/dashboard",
         2: "/admin/dashboard",
-        3: "/employee/deshbord",
+        3: "/employee/dashboard",
         4: "/customer/booking",
       };
 
@@ -110,23 +116,17 @@ function Login() {
       }
     },
     onError: (err: any) => {
-      console.error("Login error:", err);
-      if (err?.response?.data?.message) {
-        setError(err.response.data.message);
-      } else if (err?.message) {
-        setError(err.message);
-      } else {
-        setError("Server error. Please try again.");
-      }
+      setError(err?.response?.data?.message || "Server error. Please try again.");
     }
   });
 
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     setError("");
 
     if (!isFormValid()) return;
+    
     loginMutation.mutate({
       email: formData.email,
       password: formData.password,
@@ -209,4 +209,5 @@ function Login() {
     </div>
   );
 }
+
 export default Login;
