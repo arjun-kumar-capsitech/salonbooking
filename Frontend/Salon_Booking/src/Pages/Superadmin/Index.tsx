@@ -21,7 +21,7 @@ const Index: React.FC = () => {
     {key: '/super-admin/request', icon: <BarChart3 className='w-5 h-5' />, label: 'Request', },
   ];
   return (
-    <Deshbord   menuItems={superAdminMenuItems}   appName="Salon Master Control" />
+    <Deshbord  menuItems={superAdminMenuItems}/>
   );
 };
 

@@ -7,7 +7,8 @@ import { DataTable, StatusBadge } from "../../Components/Ui/Table";
 import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 
-const { getApiBooking, getApiStaff,getApiAdminServices } = getSalonBookingAPI();
+const { getApiBooking, getApiStaff, getApiAdminServices } = getSalonBookingAPI();
+
 const EmployeeDashboard = () => {
   const [activeTab, setActiveTab] = useState("today");
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -50,7 +51,8 @@ const EmployeeDashboard = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeStaffDashboard'], enabled: !!token,
+    queryKey: ['employeeStaffDashboard'],
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
       return extractData(res);
@@ -64,8 +66,19 @@ const EmployeeDashboard = () => {
 
   const staffId: string = currentStaff?.id || currentStaff?._id;
 
+  const staffMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    staffList.forEach((s: any) => {
+      const id = String(s.id || s._id);
+      const name = s.fullName || s.FullName || s.name || s.Name || s.staffName || 'Unknown Staff';
+      map[id] = name;
+    });
+    return map;
+  }, [staffList]);
+
   const { data: servicesData = [] } = useQuery({
-    queryKey: ['employeeServicesDashboard'], enabled: !!token,
+    queryKey: ['employeeServicesDashboard'],
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       return extractData(res);
@@ -82,14 +95,33 @@ const EmployeeDashboard = () => {
     return map;
   }, [servicesData]);
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching, } = useInfiniteQuery({
+  const getServiceDisplay = (booking: any): string => {
+    const serviceIds = booking.serviceIds || booking.ServiceIds || [];
+    if (Array.isArray(serviceIds) && serviceIds.length > 0) {
+      return serviceIds.map((id: string) => serviceMap[String(id)] || 'Unknown').join(', ');
+    }
+    const singleId = String(booking.serviceId || booking.ServiceId || '');
+    if (singleId && serviceMap[singleId]) {
+      return serviceMap[singleId];
+    }
+    return booking.serviceName || booking.ServiceName || 'Unknown';
+  };
+
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
     queryKey: ['employeeDashboardBookings', staffId],
-    enabled: !!token && !!staffId, initialPageParam: 1,
+    enabled: !!token && !!staffId,
+    initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
       const res = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
       const parsedData = ResponseData(res);
+
       if (!parsedData?.status === true || !parsedData?.result?.data) {
-        return { data: [], totalCount: 0, hasNextPage: false, nextPage: pageParam + 1, };
+        return {
+          data: [],
+          totalCount: 0,
+          hasNextPage: false,
+          nextPage: pageParam + 1
+        };
       }
 
       let rawBookings = parsedData.result.data;
@@ -101,19 +133,40 @@ const EmployeeDashboard = () => {
       });
 
       const transformedBookings = rawBookings.map((b: any, index: number) => {
-        const serviceId = String(b.serviceId || b.ServiceId);
-        const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || "Customer";
+        const bookingStaffId = String(b.staffId || b.StaffId);
+        const customerName = b.customerName || b.CustomerName || b.customer?.name || b.customer?.Name || "Customer";
+        const staffName = staffMap[bookingStaffId] || "Staff";
+
+        let status = (b.status || b.Status || "pending").toLowerCase();
+        if (status === "complete") status = "completed";
+
+        const dateStr = b.appointmentDate || b.AppointmentDate || '';
+        const startTime = b.startTime || b.StartTime || '';
+        const endTime = b.endTime || b.EndTime || '';
+
+        const dateFormatted = dayjs(dateStr).format("DD MMM YYYY");
+        let timeFormatted = '';
+        if (startTime && endTime) {
+          timeFormatted = `${startTime} - ${endTime}`;
+        } else if (startTime) {
+          timeFormatted = startTime;
+        } else if (endTime) {
+          timeFormatted = endTime;
+        } else {
+          timeFormatted = dayjs(dateStr).format("hh:mm A");
+        }
 
         return {
           key: b._id || b.id || `${pageParam}-${index}`,
           id: b._id || b.id,
           customerName: customerName,
-          serviceName: serviceMap[serviceId] || "N/A",
-          appointmentDate: b.appointmentDate || b.AppointmentDate,
-          date: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY"),
-          time: dayjs(b.appointmentDate || b.AppointmentDate).format("hh:mm A"),
+          staffName: staffName,
+          serviceName: getServiceDisplay(b),
+          appointmentDate: dateStr,
+          date: dateFormatted,
+          time: timeFormatted,
           amount: b.amount || b.Amount || 0,
-          status: (b.status || b.Status || "pending").toLowerCase(),
+          status: status,
           salonName: b.salonName || b.SalonName || "N/A",
         };
       });
@@ -160,8 +213,6 @@ const EmployeeDashboard = () => {
     return infiniteData?.pages?.flatMap((page) => page.data) || [];
   }, [infiniteData]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
-
   const todayBookings = useMemo(() => {
     return bookings.filter((b: any) => dayjs(b.appointmentDate).isSame(dayjs(), "day"));
   }, [bookings]);
@@ -177,14 +228,23 @@ const EmployeeDashboard = () => {
   }, [bookings]);
 
   const stats = [
-    { title: "Total Bookings", value: bookings.length, icon: <CalendarOutlined />, color: "#1890ff" },
-    { title: "Today's Bookings", value: todayBookings.length, icon: <ClockCircleOutlined />, color: "#52c41a" },
-    { title: "Upcoming", value: upcomingBookings.length, icon: <ClockCircleOutlined />, color: "#fa8c16" },
-    { title: "Revenue", value: `$${revenue}`, icon: <DollarOutlined />, color: "#722ed1" },
+    { title: "Total Bookings", value: bookings.length, icon: <CalendarOutlined />, color: "#21578a" },
+    { title: "Today's Bookings", value: todayBookings.length, icon: <ClockCircleOutlined />, color: "#108641" },
+    { title: "Upcoming", value: upcomingBookings.length, icon: <ClockCircleOutlined />, color: "#091802" },
+    { title: "Revenue", value: `$${revenue}`, icon: <DollarOutlined />, color: "#4b0da1" },
   ];
 
   const columns = [
-    { title: "Customer", dataIndex: "customerName" },
+    {
+      title: "Customer",
+      dataIndex: "customerName",
+      render: (text: string) => <div className="font-medium">{text || "N/A"}</div>
+    },
+    {
+      title: "Staff",
+      dataIndex: "staffName",
+      render: (text: string) => <div className="text-gray-600">{text || "N/A"}</div>
+    },
     { title: "Date", dataIndex: "date" },
     { title: "Time", dataIndex: "time" },
     { title: "Service", dataIndex: "serviceName" },
@@ -213,13 +273,8 @@ const EmployeeDashboard = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">My Dashboard</h1>
-        <p className="text-gray-500">View your assigned appointments</p>
-        {totalCount > 0 && (
-          <p className="text-sm text-gray-400 mt-1">
-            Showing {bookings.length} of {totalCount} bookings
-          </p>
-        )}
+        <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>My Dashboard</h1>
+        <p className="text-gray-500" style={{ fontFamily: 'Public Sans, sans-serif' }} >View your assigned appointments</p>
       </div>
 
       <Row gutter={[16, 16]} className="mb-6">
@@ -230,7 +285,7 @@ const EmployeeDashboard = () => {
         ))}
       </Row>
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex gap-4 mb-4 flex-wrap">
         <Button
           type={activeTab === "today" ? "primary" : "default"}
           onClick={() => setActiveTab("today")}
@@ -278,5 +333,4 @@ const EmployeeDashboard = () => {
     </div>
   );
 };
-
 export default EmployeeDashboard;

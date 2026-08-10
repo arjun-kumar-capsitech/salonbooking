@@ -248,8 +248,8 @@ const Compani = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Companies Management</h1>
-          <p className="text-gray-600">Manage all salon companies</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>Companies Management</h1>
+          <p className="text-gray-600"  style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage all salon companies</p>
           {totalCount > 0 && (
             <p className="text-sm text-gray-500 mt-1">
               Showing {filteredCompanies.length} of {totalCount} companies

@@ -89,5 +89,6 @@ namespace SalonBackend.Models
 
         [BsonRepresentation(BsonType.ObjectId)]
         public string? EmployeeProfileId { get; set; }
+        public string? Name { get; internal set; }
     }
 }

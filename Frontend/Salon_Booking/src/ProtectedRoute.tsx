@@ -45,7 +45,7 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   if (allowedRoles && allowedRoles.length > 0) {
     if (!finalUser.role || !allowedRoles.includes(finalUser.role)) {
       const roleRoutes: Record<number, string> = {
-        1: "/super-admin/dashboard",
+        1: "/super-admin/deshboard",
         2: "/admin/dashboard",
         3: "/employee/dashboard",
         4: "/customer/booking",

@@ -10,12 +10,7 @@ import ModalForm from '../../Components/Ui/Modals';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const { 
-  getApiAdminServices, 
-  postApiAdminServices, 
-  putApiAdminServicesId, 
-  deleteApiAdminServicesId 
-} = getSalonBookingAPI();
+const { getApiAdminServices, postApiAdminServices, putApiAdminServicesId, deleteApiAdminServicesId } = getSalonBookingAPI();
 
 const Service = () => {
   const [modalVisible, setModalVisible] = useState(false);
@@ -94,7 +89,6 @@ const Service = () => {
   const { data: services = [], isLoading: loading } = useQuery({
     queryKey: ['service'],
     queryFn: async () => {
-      // ✅ getApiAdminServices - SAHI NAME
       const response = await getApiAdminServices(axiosConfig);
       let servicesData = extractData(response);
       let filteredServices = Array.isArray(servicesData) ? servicesData : [];
@@ -134,7 +128,6 @@ const Service = () => {
   }, [searchFilteredData, statusFilter]);
 
   const addServiceMutation = useMutation({
-    // ✅ postApiAdminServices - SAHI NAME
     mutationFn: async (payload: any) => {
       const response = await postApiAdminServices(payload, axiosConfig);
       return extractData(response);
@@ -155,7 +148,6 @@ const Service = () => {
   });
 
   const updateServiceMutation = useMutation({
-    // ✅ putApiAdminServicesId - SAHI NAME
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
       await putApiAdminServicesId(id, payload, axiosConfig);
     },
@@ -175,7 +167,6 @@ const Service = () => {
   });
 
   const deleteServiceMutation = useMutation({
-    // ✅ deleteApiAdminServicesId - SAHI NAME
     mutationFn: async (id: string) => {
       await deleteApiAdminServicesId(id, axiosConfig);
     },
@@ -247,10 +238,10 @@ const Service = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold"  style={{ fontFamily: 'PT Serif, serif' }}>
             {isCustomer ? "Available Services" : "Service Management"}
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >
             {isCustomer ? "Browse our services" : "Manage salon services"}
           </p>
         </div>

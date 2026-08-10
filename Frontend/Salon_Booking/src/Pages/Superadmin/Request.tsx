@@ -82,7 +82,6 @@ const Request = () => {
     }
   });
 
-  // ✅ useSearch hook - Auto debounce with 500ms
   const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
     requests,
     ['companyName', 'owner', 'email'],
@@ -155,8 +154,8 @@ const Request = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Salon Requests</h1>
-          <p className="text-gray-600">Manage salon registration requests</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>Salon Requests</h1>
+          <p className="text-gray-600"  style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage salon registration requests</p>
           {requests.length > 0 && (
             <p className="text-sm text-gray-500 mt-1">
               Showing {filteredRequests.length} of {requests.length} requests

@@ -1,5 +1,7 @@
-import { Input, Select, Form } from 'antd';
-import { type Rule } from 'antd/es/form';
+import React from "react";
+import { Form, Input, Select } from "antd";
+import type { Rule } from "antd/es/form";
+import type { ReactNode } from "react";
 
 const { Option } = Select;
 
@@ -8,9 +10,10 @@ interface InputFieldProps {
   name: string;
   placeholder?: string;
   required?: boolean;
-  type?: 'text' | 'password' | 'email' | 'number';
-  prefix?: React.ReactNode;
+  type?: "text" | "password" | "email" | "number";
+  prefix?: ReactNode;
   rules?: Rule[];
+  className?: string;
 }
 
 interface SelectOption {
@@ -25,36 +28,63 @@ interface SelectFieldProps {
   required?: boolean;
   options?: SelectOption[];
   rules?: Rule[];
+  className?: string;
 }
+
+const inputClass =
+  "rounded-lg h-11 hover:border-blue-400 focus:border-blue-500";
 
 export const InputField: React.FC<InputFieldProps> = ({
   label,
   name,
   placeholder,
   required = false,
-  type = 'text',
+  type = "text",
   prefix,
-  rules = []
+  rules = [],
+  className = "",
 }) => {
-  const allRules: Rule[] = [
-    ...(required ? [{ required: true, message: `Please enter ${label.toLowerCase()}` }] : []),
-    ...rules
+  const validationRules: Rule[] = [
+    ...(required
+      ? [
+          {
+            required: true,
+            message: `Please enter ${label.toLowerCase()}`,
+          },
+        ]
+      : []),
+    ...rules,
   ];
 
   return (
-    <>
-      <Form.Item
-        label={<span className="font-semibold">{label}</span>}
-        name={name}
-        rules={allRules}
-      >
-        {type === 'password' ? (
-          <Input.Password placeholder={placeholder} prefix={prefix} />
-        ) : (
-          <Input placeholder={placeholder} prefix={prefix} type={type} />
-        )}
-      </Form.Item>
-    </>
+    <Form.Item
+      label={
+        <span className="font-semibold text-gray-700">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </span>
+      }
+      name={name}
+      rules={validationRules}
+      className={className}
+    >
+      {type === "password" ? (
+        <Input.Password
+          placeholder={placeholder}
+          prefix={prefix}
+          size="large"
+          className={inputClass}
+        />
+      ) : (
+        <Input
+          type={type}
+          placeholder={placeholder}
+          prefix={prefix}
+          size="large"
+          className={inputClass}
+        />
+      )}
+    </Form.Item>
   );
 };
 
@@ -64,28 +94,44 @@ export const SelectField: React.FC<SelectFieldProps> = ({
   placeholder,
   required = false,
   options = [],
-  rules = []
+  rules = [],
+  className = "",
 }) => {
-  const allRules: Rule[] = [
-    ...(required ? [{ required: true, message: `Please select ${label.toLowerCase()}` }] : []),
-    ...rules
+  const validationRules: Rule[] = [
+    ...(required
+      ? [
+          {
+            required: true,
+            message: `Please select ${label.toLowerCase()}`,
+          },
+        ]
+      : []),
+    ...rules,
   ];
 
   return (
-    <>
-      <Form.Item
-        label={<span className="font-semibold">{label}</span>}
-        name={name}
-        rules={allRules}
+    <Form.Item
+      label={
+        <span className="font-semibold text-gray-700">
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </span>
+      }
+      name={name}
+      rules={validationRules}
+      className={className}
+    >
+      <Select
+        placeholder={placeholder}
+        size="large"
+        className="rounded-lg"
       >
-        <Select placeholder={placeholder}>
-          {options.map(option => (
-            <Option key={String(option.value)} value={option.value}>
-              {option.label}
-            </Option>
-          ))}
-        </Select>
-      </Form.Item>
-    </>
+        {options.map((option) => (
+          <Option key={option.value} value={option.value}>
+            {option.label}
+          </Option>
+        ))}
+      </Select>
+    </Form.Item>
   );
 };

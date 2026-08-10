@@ -23,7 +23,6 @@ const EmployeeIndex: React.FC = () => {
   return (
     <Deshbord
       menuItems={menuItems}
-      appName="ESalon System"
     />
   );
 };

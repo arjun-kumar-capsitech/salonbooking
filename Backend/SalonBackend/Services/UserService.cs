@@ -1,7 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using SalonBackend.Models;
@@ -49,7 +48,17 @@ namespace SalonBackend.Services
                 Success = true, 
                 Message = "Login successful",
                 Token = token,
-                User = user
+                User = new
+                {
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                    SalonName = user.SalonName,
+                    SalonAddress = user.SalonAddress,
+                    Role = user.Role,
+                    IsActive = user.IsActive
+                }
             };
         }
 
@@ -118,7 +127,13 @@ namespace SalonBackend.Services
                 Success = true,
                 Message = "Employee registered successfully",
                 Token = token,
-                User = user
+                User = new
+                {
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    Role = user.Role
+                }
             };
         }
 
@@ -149,7 +164,17 @@ namespace SalonBackend.Services
                 Success = true,
                 Message = $"{role} registered successfully",
                 Token = token,
-                User = user
+                User = new
+                {
+                    Id = user.Id,
+                    FullName = user.FullName,
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                    SalonName = user.SalonName,
+                    SalonAddress = user.SalonAddress,
+                    Role = user.Role,
+                    IsActive = user.IsActive
+                }
             };
         }
 
@@ -225,9 +250,10 @@ namespace SalonBackend.Services
                     new Claim(ClaimTypes.Name, user.FullName),
                     new Claim(ClaimTypes.Email, user.Email),
                     new Claim(ClaimTypes.Role, user.Role.ToString()),
-                    new Claim("SalonName", user.SalonName ?? "")
+                    new Claim("SalonName", user.SalonName ?? ""),
+                    new Claim("UserId", user.Id)
                 }),
-                Expires = DateTime.UtcNow.AddHours(5),
+                Expires = DateTime.UtcNow.AddDays(7),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
                     SecurityAlgorithms.HmacSha256Signature
@@ -236,11 +262,6 @@ namespace SalonBackend.Services
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             return tokenHandler.WriteToken(token);
-        }
-
-        internal async Task<string> GenerateJwtTokenAsync(ApplicationUser user)
-        {
-            throw new NotImplementedException();
         }
     }
 }

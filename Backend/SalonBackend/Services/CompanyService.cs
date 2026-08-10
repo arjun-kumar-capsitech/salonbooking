@@ -23,7 +23,6 @@ namespace SalonBackend.Services
                 .Find(c => c.Id == id)
                 .FirstOrDefaultAsync();
         }
-
         public async Task<Company> CreateAsync(Company company)
         {
             await _company.InsertOneAsync(company);

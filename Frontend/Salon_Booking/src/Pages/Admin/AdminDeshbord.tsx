@@ -6,8 +6,6 @@ import { setPermissionsByRole } from "../../Redux/Store/Slice/userContentSlice";
 
 const AdminDashboard = () => {
   const dispatch = useDispatch();
-
-  // JavaScript mein direct state.auth use karo
   const { user } = useSelector((state: any) => state.auth);
 
   React.useEffect(() => {
@@ -25,7 +23,9 @@ const AdminDashboard = () => {
     { key: "/admin/setting", icon: <Settings className="w-5 h-5" />, label: "Settings" },
   ];
 
-  return <Deshbord menuItems={menuItems} appName="Salon Manager" />;
+  return <Deshbord menuItems={menuItems}/>;
 };
 
 export default AdminDashboard;
+
+// .format("hh:mm A")

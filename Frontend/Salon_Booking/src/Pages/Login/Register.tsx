@@ -1,14 +1,9 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { getSalonBookingAPI } from "../../api/generated";
-
-// API functions extract karo
-const { 
-  postApiUserRegisterCustomer, 
-  postApiUserRegisterAdmin 
-} = getSalonBookingAPI();
+const {  postApiUserRegisterCustomer,  postApiUserRegisterAdmin } = getSalonBookingAPI();
 
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
@@ -75,7 +70,6 @@ function Register() {
     return fields.every(field => !validateField(field, formData[field as keyof typeof formData]));
   };
 
-  // Customer Registration Mutation
   const customerRegisterMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await postApiUserRegisterCustomer(data);
@@ -330,14 +324,13 @@ function Register() {
 
           <p className="text-center text-gray-600 text-sm mt-6">
             Already have an account?{" "}
-            <a href="/" className="text-blue-600 font-medium hover:text-blue-800">
+            <Link to="/" className="text-blue-600 font-medium hover:text-blue-800">
               Sign in
-            </a>
+            </Link>
           </p>
         </form>
       </div>
     </div>
   );
 }
-
 export default Register;

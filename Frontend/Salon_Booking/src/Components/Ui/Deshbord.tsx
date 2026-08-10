@@ -1,14 +1,15 @@
-import React, { useEffect } from "react";
-import { Button, Layout, Menu, Avatar } from "antd";
+import React, { useEffect, useState } from "react";
+import { Button, Layout, Menu, Avatar, Drawer } from "antd";
 import type { MenuProps } from "antd";
 import { LogOut } from "lucide-react";
+import { MenuOutlined } from "@ant-design/icons";
 import { useNavigate, Outlet, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import logo from "../Imeges/Copilot_20260327_173847.png";
 import { setLogout } from "../../Redux/Store/Slice/authSlice";
 import { resetUserData } from "../../Redux/Store/Slice/userslice";
 import { resetUserContent } from "../../Redux/Store/Slice/userContentSlice";
-import { getSalonBookingAPI } from "../../api/generated"; 
+import { getSalonBookingAPI } from "../../api/generated";
 
 const { Sider, Content } = Layout;
 
@@ -25,29 +26,51 @@ interface DeshbordProps {
 
 const Deshbord: React.FC<DeshbordProps> = ({
   menuItems,
-  appName = "Salon Manager",
 }) => {
   const navigate = useNavigate();
-  const location = useLocation()
+  const location = useLocation();
   const dispatch = useDispatch();
-  
+
   const auth = useSelector((state: any) => state.auth);
   const user = useSelector((state: any) => state.user);
-  
+
   const authUser = auth?.user;
   const { name, role: userRole } = user || {};
-  
-  const [collapsed] = React.useState(false);
+
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const api = getSalonBookingAPI();
 
   useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (window.innerWidth >= 768 && window.innerWidth < 1024) {
+      setCollapsed(true);
+    } else if (window.innerWidth >= 1024) {
+      setCollapsed(false);
+    }
+  }, []);
+
+  useEffect(() => {
     const currentPath = location.pathname;
-    if (currentPath && 
-        currentPath !== '/admin' && 
-        currentPath !== '/super-admin' &&
-        currentPath !== '/employee' &&
-        currentPath !== '/customer') {
+    if (currentPath &&
+      currentPath !== '/admin' &&
+      currentPath !== '/super-admin' &&
+      currentPath !== '/employee' &&
+      currentPath !== '/customer') {
       localStorage.setItem('lastVisitedPath', currentPath);
     }
   }, [location.pathname]);
@@ -55,9 +78,9 @@ const Deshbord: React.FC<DeshbordProps> = ({
   useEffect(() => {
     const lastPath = localStorage.getItem('lastVisitedPath');
     const currentPath = location.pathname;
-    
-    if ((currentPath === '/admin' || currentPath === '/super-admin' || 
-         currentPath === '/employee' || currentPath === '/customer') && lastPath) {
+
+    if ((currentPath === '/admin' || currentPath === '/super-admin' ||
+      currentPath === '/employee' || currentPath === '/customer') && lastPath) {
       navigate(lastPath);
     }
   }, []);
@@ -102,7 +125,7 @@ const Deshbord: React.FC<DeshbordProps> = ({
       dispatch(setLogout());
       dispatch(resetUserData());
       dispatch(resetUserContent());
-        navigate("/");
+      navigate("/");
     }
   };
 
@@ -118,75 +141,214 @@ const Deshbord: React.FC<DeshbordProps> = ({
     return matchedItem?.key || menuItems[0]?.key || "";
   };
 
-  return (
-    <Layout className="h-screen overflow-hidden">
-      <Sider 
-        trigger={null} 
-        collapsible 
-        collapsed={collapsed}
-        className="h-screen relative"
-      >
-        <div className="flex items-center justify-center pt-4 pb-4">
-          <img
-            src={logo}
-            alt="App Logo"
-            className="w-18 h-18 object-contain pt-3"
-          />
-          <h2 className="text-[21px] text-white">{appName}</h2>
-        </div>
-
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[getSelectedKey()]}
-          items={menuItemsFormatted}
-          onClick={(e) => navigate(e.key)}
-          className="border-r-0 overflow-y-auto"
-          style={{ height: "calc(100% - 180px)" }}
+  const SidebarContent = () => (
+    <>
+      <div className="flex items-center justify-center pt-2 pb-2">
+        <img
+          src={logo}
+          alt="App Logo"
+          className="w-30 h-22 pt-3"
         />
+        <h2
+          className="text-3xl font-extrabold tracking-wider"
+          style={{ fontFamily: "'Abril Fatface', serif" }}
+        >
+          <span className="text-white">Salon</span>{" "}
+          <span className="text-[#00A5A7]">Verse</span>
+        </h2>
+      </div>
+      <Menu
+        theme="dark"
+        mode="inline"
+        selectedKeys={[getSelectedKey()]}
+        items={menuItemsFormatted}
+        onClick={(e) => {
+          navigate(e.key);
+          if (isMobile) {
+            setMobileMenuOpen(false);
+          }
+        }}
+        className="border-r-0 overflow-y-auto"
+        style={{ height: "calc(100% - 180px)" }}
+      />
 
-        <div className="absolute left-0 right-0 bottom-20 p-4">
-          <div className="flex items-center">
-            <Avatar
-              size={collapsed ? 32 : 40}
-              className="flex items-center justify-center"
-              style={{ backgroundColor: '#001d3d' }}
-            >
-              {getFirstLetter()}
-            </Avatar>
-            {!collapsed && (
-              <div className="ml-3">
-                <div className="text-white font-semibold">
-                  {displayName}
-                </div>
-                <div className="text-green-300 flex items-center gap-1 text-sm">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  {getRoleName(displayRole)}
-                </div>
+      <div className="absolute left-0 right-0 bottom-20 p-4">
+        <div className="flex items-center">
+          <Avatar
+            size={collapsed ? 32 : 40}
+            className="flex items-center justify-center"
+            style={{ backgroundColor: '#001d3d' }}
+          >
+            {getFirstLetter()}
+          </Avatar>
+          {!collapsed && (
+            <div className="ml-3">
+              <div className="text-white font-semibold">
+                {displayName}
               </div>
-            )}
+              <div className="text-green-300 flex items-center gap-1 text-sm">
+                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                {getRoleName(displayRole)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="absolute left-0 right-0 bottom-5 p-4">
+        <Button
+          type="primary"
+          danger
+          block
+          onClick={handleLogout}
+          icon={<LogOut className="w-4 h-4" />}
+          className="flex items-center justify-center gap-2"
+        >
+          {!collapsed && "Logout"}
+        </Button>
+      </div>
+    </>
+  );
+
+  const MobileSidebarContent = () => (
+    <>
+      <div className="flex items-center justify-center pt-4 pb-2">
+        <h2
+          className="text-xl font-extrabold tracking-wider"
+          style={{ fontFamily: "'Abril Fatface', serif" }}
+        >
+          <span className="text-white">Salon</span>{" "}
+          <span className="text-[#00A5A7]">Verse</span>
+        </h2>
+      </div>
+      <Menu
+        theme="dark"
+        mode="inline"
+        selectedKeys={[getSelectedKey()]}
+        items={menuItemsFormatted}
+        onClick={(e) => {
+          navigate(e.key);
+          if (isMobile) {
+            setMobileMenuOpen(false);
+          }
+        }}
+        className="border-r-0 overflow-y-auto"
+        style={{ height: "calc(100% - 180px)" }}
+      />
+
+      <div className="absolute left-0 right-0 bottom-20 p-4">
+        <div className="flex items-center">
+          <Avatar
+            size={40}
+            className="flex items-center justify-center"
+            style={{ backgroundColor: '#001d3d' }}
+          >
+            {getFirstLetter()}
+          </Avatar>
+          <div className="ml-3">
+            <div className="text-white font-semibold text-sm">
+              {displayName}
+            </div>
+            <div className="text-green-300 flex items-center gap-1 text-xs">
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+              {getRoleName(displayRole)}
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="absolute left-0 right-0 bottom-5 p-4">
-          <Button
-            type="primary"
-            danger
-            block
-            onClick={handleLogout}
-            icon={<LogOut className="w-4 h-4" />}
-            className="flex items-center justify-center gap-2"
+      <div className="absolute left-0 right-0 bottom-5 p-4">
+        <Button
+          type="primary"
+          danger
+          block
+          onClick={handleLogout}
+          icon={<LogOut className="w-4 h-4" />}
+          className="flex items-center justify-center gap-2 text-sm"
+        >
+          Logout
+        </Button>
+      </div>
+    </>
+  );
+
+  return (
+    <Layout className="h-screen overflow-hidden">
+      {isMobile && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-[#001529] h-16 px-4 flex items-center justify-between shadow-lg">
+          <div className="flex items-center">
+            <Button
+              type="text"
+              icon={<MenuOutlined style={{ color: 'white', fontSize: '20px' }} />}
+              onClick={() => setMobileMenuOpen(true)}
+            />
+            <h2
+              className="text-xl font-extrabold tracking-wider ml-2"
+              style={{ fontFamily: "'Abril Fatface', serif" }}
+            >
+              <span className="text-white">Salon</span>{" "}
+              <span className="text-[#00A5A7]">Verse</span>
+            </h2>
+          </div>
+          <Avatar
+            size={36}
+            style={{ backgroundColor: '#08223d' }}
           >
-            {!collapsed && "Logout"}
-          </Button>
+            {getFirstLetter()}
+          </Avatar>
         </div>
-      </Sider>
+      )}
 
-      <Content className="h-screen overflow-y-auto bg-gray-100">
-        <div className="p-6 min-h-full">
+      {!isMobile && (
+        <Sider
+          trigger={null}
+          collapsible
+          collapsed={collapsed}
+          className="h-screen relative"
+        >
+          <SidebarContent />
+        </Sider>
+      )}
+
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          closable={false}
+          bodyStyle={{
+            padding: 0,
+            background: '#001529',
+            height: '100vh'
+          }}
+          width={240}
+          className="mobile-drawer"
+        >
+          <div className="h-full w-full relative">
+            <MobileSidebarContent />
+          </div>
+        </Drawer>
+      )}
+
+      <Content className={`h-screen overflow-y-auto bg-gray-100 ${isMobile ? 'mt-16' : ''}`}>
+        <div className="p-4 sm:p-6 min-h-full bg-[#FAFAFA]">
           <Outlet />
         </div>
       </Content>
+
+      <style>{`
+        .mobile-drawer .ant-drawer-body {
+          padding: 0;
+          height: 100vh;
+        }
+        .mobile-drawer .ant-drawer-content {
+          background: #001529;
+        }
+        .mobile-drawer .ant-drawer-content-wrapper {
+          height: 100vh !important;
+          width: 240px !important;
+        }
+      `}</style>
     </Layout>
   );
 };

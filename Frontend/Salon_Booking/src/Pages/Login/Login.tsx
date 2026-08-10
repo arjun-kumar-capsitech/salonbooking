@@ -25,6 +25,7 @@ function Login() {
     }
     if (name === "password") {
       if (!value) return "Password is required";
+      if (value.length < 6) return "Password must be at least 6 characters";
       return "";
     }
     return "";
@@ -40,6 +41,15 @@ function Login() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (submitted) setError("");
+  };
+
+  const getCookie = (name: string) => {
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+      const [key, value] = cookie.trim().split('=');
+      if (key === name) return decodeURIComponent(value);
+    }
+    return null;
   };
 
   const loginMutation = useMutation({
@@ -67,45 +77,30 @@ function Login() {
       }
 
       const user = data.result.user;
-      
-      // Try to get token from multiple sources
-      const getCookie = (name: string) => {
-        const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
-          const [key, value] = cookie.trim().split('=');
-          if (key === name) return decodeURIComponent(value);
-        }
-        return null;
-      };
 
-      let token = getCookie('jwt_token') || 
-                 getCookie('token') || 
-                 getCookie('authToken') ||
-                 user.id;
+      let token = getCookie('jwt_token') ||
+        getCookie('token') ||
+        getCookie('authToken') ||
+        user.id;
 
-      // Store in localStorage
       localStorage.setItem("user", JSON.stringify(user));
       localStorage.setItem("jwt_token", token);
       localStorage.setItem("authToken", token);
-
-      // Dispatch to Redux
       dispatch(setLogin({ user, token }));
 
-      // Check admin approval status
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
         return;
       }
 
-      // Navigate based on role
       const redirectPath = localStorage.getItem("redirectAfterLogin");
       localStorage.removeItem("redirectAfterLogin");
 
       const roleRoutes: Record<number, string> = {
-        1: "/super-admin/dashboard",
+        1: "/super-admin/deshboard",
         2: "/admin/dashboard",
-        3: "/employee/dashboard",
+        3: "/employee/deshbord",
         4: "/customer/booking",
       };
 
@@ -124,9 +119,8 @@ function Login() {
     e.preventDefault();
     setSubmitted(true);
     setError("");
-
     if (!isFormValid()) return;
-    
+
     loginMutation.mutate({
       email: formData.email,
       password: formData.password,
@@ -157,9 +151,8 @@ function Login() {
               placeholder="Email"
               value={formData.email}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg ${
-                emailError ? "border-red-500" : "border-gray-300"
-              } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+              className={`w-full px-4 py-3 border rounded-lg ${emailError ? "border-red-500" : "border-gray-300"
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
               disabled={isLoading}
             />
             {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
@@ -173,9 +166,8 @@ function Login() {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 ${
-                  passwordError ? "border-red-500" : "border-gray-300"
-                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                className={`w-full px-4 py-3 border rounded-lg pr-12 ${passwordError ? "border-red-500" : "border-gray-300"
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 disabled={isLoading}
               />
               <button

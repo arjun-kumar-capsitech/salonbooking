@@ -5,6 +5,7 @@ import Login from "./Pages/Login/Login";
 import Register from "./Pages/Login/Register";
 import Allrouts from "./Layout/Allroutes";
 import { setLogin } from "./Redux/Store/Slice/authSlice";
+import LiveBooking from "./Pages/LiveBooking";
 
 function App() {
   const dispatch = useDispatch();
@@ -18,7 +19,7 @@ function App() {
 
       if (token && userData) {
         try {
-          const parsedUser = JSON.parse(userData);
+          const parsedUser = JSON.parse (userData);
           dispatch(setLogin({ token, user: parsedUser }));
         } catch (error) {
           console.error("Error parsing user data:", error);
@@ -38,9 +39,9 @@ function App() {
     if (!user) return "/";
     
     const roleRoutes: Record<number, string> = {
-      1: "/super-admin/dashboard",
+      1: "/super-admin/deshboard",
       2: "/admin/dashboard",
-      3: "/employee/dashboard",
+      3: "/employee/deshbord",
       4: "/customer/booking",
     };
     
@@ -52,6 +53,7 @@ function App() {
   return (
     <Routes>
       <Route path="/signup" element={<Register />} />
+       <Route path="/login" element={<Login />} />
       <Route
         path="/"
         element={
@@ -59,8 +61,8 @@ function App() {
         }
       />
       <Route path="/*" element={<Allrouts />} />
+      <Route path="/live-booking" element={<LiveBooking />} />
     </Routes>
   );
 }
-
 export default App;

@@ -10,14 +10,10 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { 
-  getApiUser, 
-  getApiStaff, 
-  putApiUserId, 
-  postApiUserRegisterEmployee, 
-  postApiUserRegisterCustomer, 
-  deleteApiUserId 
-} = getSalonBookingAPI();const { Option } = Select;
+const {  getApiUser,  getApiStaff,  putApiUserId,  postApiUserRegisterEmployee,  postApiUserRegisterCustomer,  deleteApiUserId } = getSalonBookingAPI();
+
+const { Option } = Select;
+
 const User = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
@@ -60,23 +56,23 @@ const User = () => {
     form.resetFields();
   };
 
-  const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffList'],
-    queryFn: async () => {
-      const response = await getApiStaff(undefined, axiosConfig);
-      const parsedData = ResponseData(response);
+ const { data: staffData, isLoading: staffLoading } = useQuery({
+  queryKey: ['staffList'],
+  queryFn: async () => {
+    const response = await getApiStaff(undefined, axiosConfig);
+    const parsedData = ResponseData(response);
 
-      if (parsedData?.status === true && parsedData?.result) {
-        const result = parsedData.result;
-        if (Array.isArray(result)) {
-          return result;
-        } else if (result.data && Array.isArray(result.data)) {
-          return result.data;
-        }
+    if (parsedData?.status === true && parsedData?.result) {
+      const result = parsedData.result;
+      if (Array.isArray(result)) {
+        return result;
+      } else if (result.data && Array.isArray(result.data)) {
+        return result.data;
       }
-      return [];
-    },
-  });
+    }
+    return [];
+  },
+});
 
   const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading } = useInfiniteQuery({
     queryKey: ['allUsers', roleFilter, statusFilter],
@@ -385,11 +381,11 @@ const User = () => {
   const isLoading = (usersLoading && !infiniteData) || staffLoading;
 
   return (
-    <div className="p-6">
+    <div className="p-6 ">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">User Management</h1>
-          <p className="text-gray-600">Manage Employee and Customer users</p>
+          <h1 className="text-2xl font-bold"  style={{ fontFamily: 'PT Serif, serif' }}>User Management</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >Manage Employee and Customer users</p>
         </div>
         <Button
           type="primary"
@@ -406,7 +402,7 @@ const User = () => {
       </div>
 
       <Card className="mb-6">
-        <div className="flex gap-4 flex-wrap">
+        <div className="flex gap-4 flex-wrap ">
           <Input
             placeholder="Search users..."
             prefix={<SearchOutlined />}
@@ -569,4 +565,5 @@ const User = () => {
     </div>
   );
 };
+
 export default User;

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Card, Button, Input, message, Tag, Spin, Select } from "antd";
+import { Card, Button, Input, message, Spin, Select } from "antd";
 import { SearchOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import Modals from "../../Components/Ui/Modals";
@@ -9,13 +9,17 @@ import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const { getApiBooking, getApiStaff,getApiAdminServices,putApiBookingId } = getSalonBookingAPI();
+const { getApiBooking, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
 
 interface BookingType {
   key: string;
   id: string;
   customerName: string;
+  customerId: string;
+  staffName: string;
+  staffId: string;
   serviceName: string;
+  serviceId: string;
   appointmentDate: string;
   date: string;
   time: string;
@@ -74,7 +78,7 @@ const EmployeeBooking: React.FC = () => {
   };
 
   const { data: staffList = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['employeeStaffList'], 
+    queryKey: ['employeeStaffList'],
     enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
@@ -88,6 +92,16 @@ const EmployeeBooking: React.FC = () => {
   });
 
   const staffId: string = currentStaff?.id || currentStaff?._id;
+
+  const staffMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    staffList.forEach((s: any) => {
+      const id = String(s.id || s._id);
+      const name = s.fullName || s.FullName || s.name || s.Name || s.staffName || 'Unknown Staff';
+      map[id] = name;
+    });
+    return map;
+  }, [staffList]);
 
   const { data: servicesData = [] } = useQuery({
     queryKey: ['employeeServices'],
@@ -141,20 +155,57 @@ const EmployeeBooking: React.FC = () => {
       }
 
       const transformedBookings = rawBookings.map((b: any, index: number): BookingType => {
-        const serviceId = String(b.serviceId || b.ServiceId);
-        const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || "Customer";
+        const bookingStaffId = String(b.staffId || b.StaffId);
+        const customerName = b.customerName || b.CustomerName || b.customer?.name || b.customer?.Name || "Customer";
+        const customerId = b.customerId || b.CustomerId || b.customer?.id || b.customer?._id || "";
+        const staffName = staffMap[bookingStaffId] || "Staff";
+
+        // ✅ service names from serviceIds array
+        const serviceIdsArray = b.serviceIds || b.ServiceIds || [];
+        let serviceNames: string[] = [];
+        if (Array.isArray(serviceIdsArray) && serviceIdsArray.length > 0) {
+          serviceNames = serviceIdsArray.map((id: string) => serviceMap[String(id)] || 'Unknown');
+        } else {
+          const singleId = String(b.serviceId || b.ServiceId || '');
+          if (singleId && serviceMap[singleId]) {
+            serviceNames = [serviceMap[singleId]];
+          } else {
+            serviceNames = ['Unknown'];
+          }
+        }
+        const serviceDisplay = serviceNames.join(', ');
 
         let status = (b.status || b.Status || "pending").toLowerCase();
         if (status === "complete") status = "completed";
+
+        const dateStr = b.appointmentDate || b.AppointmentDate || '';
+        const startTime = b.startTime || b.StartTime || '';
+        const endTime = b.endTime || b.EndTime || '';
+
+        const dateFormatted = dayjs(dateStr).format("DD MMM YYYY");
+        let timeFormatted = '';
+        if (startTime && endTime) {
+          timeFormatted = `${startTime} - ${endTime}`;
+        } else if (startTime) {
+          timeFormatted = startTime;
+        } else if (endTime) {
+          timeFormatted = endTime;
+        } else {
+          timeFormatted = dayjs(dateStr).format("hh:mm A");
+        }
 
         return {
           key: b._id || b.id || `${pageParam}-${index}`,
           id: b._id || b.id,
           customerName: customerName,
-          serviceName: serviceMap[serviceId] || "N/A",
-          appointmentDate: b.appointmentDate || b.AppointmentDate,
-          date: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY"),
-          time: dayjs(b.appointmentDate || b.AppointmentDate).format("hh:mm A"),
+          customerId: customerId,
+          staffName: staffName,
+          staffId: bookingStaffId,
+          serviceName: serviceDisplay,
+          serviceId: b.serviceId || b.ServiceId || '',
+          appointmentDate: dateStr,
+          date: dateFormatted,
+          time: timeFormatted,
           amount: b.amount || b.Amount || 0,
           status: status,
           salonName: b.salonName || b.SalonName || "N/A",
@@ -213,8 +264,6 @@ const EmployeeBooking: React.FC = () => {
     return searchFilteredData || [];
   }, [searchFilteredData]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
-
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       await putApiBookingId(id, { status }, axiosConfig);
@@ -233,15 +282,6 @@ const EmployeeBooking: React.FC = () => {
   const handleStatusUpdate = (newStatus: string): void => {
     if (selectedBooking) {
       updateStatusMutation.mutate({ id: selectedBooking.id, status: newStatus });
-    }
-  };
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case "completed": return "green";
-      case "confirmed": return "blue";
-      case "cancelled": return "red";
-      default: return "orange";
     }
   };
 
@@ -297,13 +337,8 @@ const EmployeeBooking: React.FC = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">My Assigned Bookings</h1>
-          <p className="text-gray-600">View and manage your assigned appointments</p>
-          {totalCount > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Showing {filteredBookings.length} of {totalCount} bookings
-            </p>
-          )}
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>My Assigned Bookings</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >View and manage your assigned appointments</p>
         </div>
       </div>
 
@@ -371,37 +406,42 @@ const EmployeeBooking: React.FC = () => {
           setModalVisible(false);
           setSelectedBooking(null);
         }}
-        title={`Booking Details - ${selectedBooking?.customerName || ""}`}
-        onSubmit={() => {}}
+        title={`Booking Details`}
+        onSubmit={() => {
+          setModalVisible(false);
+          setSelectedBooking(null);
+        }}
         submitText="Close"
       >
         {selectedBooking && (
           <div className="space-y-4">
-            <div className="border-b pb-3">
+            <div>
               <p className="text-sm text-gray-500">Customer</p>
               <p className="font-medium text-lg">{selectedBooking.customerName}</p>
             </div>
-            <div className="border-b pb-3">
+            <div>
+              <p className="text-sm text-gray-500">Staff</p>
+              <p className="font-medium">{selectedBooking.staffName}</p>
+            </div>
+            <div>
               <p className="text-sm text-gray-500">Service</p>
               <p className="font-medium">{selectedBooking.serviceName}</p>
             </div>
-            <div className="border-b pb-3">
+            <div>
               <p className="text-sm text-gray-500">Salon</p>
               <p className="font-medium">{selectedBooking.salonName}</p>
             </div>
-            <div className="border-b pb-3">
+            <div>
               <p className="text-sm text-gray-500">Date & Time</p>
               <p className="font-medium">{selectedBooking.date} at {selectedBooking.time}</p>
             </div>
-            <div className="border-b pb-3">
+            <div>
               <p className="text-sm text-gray-500">Amount</p>
               <p className="font-medium text-lg text-green-600">${selectedBooking.amount}</p>
             </div>
-            <div className="border-b pb-3">
+            <div>
               <p className="text-sm text-gray-500">Status</p>
-              <Tag color={getStatusColor(selectedBooking.status)}>
-                {selectedBooking.status?.toUpperCase() || "PENDING"}
-              </Tag>
+              <p className="font-medium">{selectedBooking.status?.toUpperCase() || "PENDING"}</p>
             </div>
 
             {selectedBooking.status !== "completed" && selectedBooking.status !== "cancelled" && (
@@ -439,5 +479,4 @@ const EmployeeBooking: React.FC = () => {
     </div>
   );
 };
-
 export default EmployeeBooking;

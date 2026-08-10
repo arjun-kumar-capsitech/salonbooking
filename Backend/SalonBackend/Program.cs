@@ -9,6 +9,7 @@ using Hangfire.Mongo;
 using Hangfire.Mongo.Migration.Strategies;
 using Hangfire.Mongo.Migration.Strategies.Backup;
 using NetEscapades.AspNetCore.SecurityHeaders;
+using SalonBackend.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +23,7 @@ builder.Services.AddCors(options =>
               .AllowCredentials();
     });
 });
-
+builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -65,6 +66,7 @@ builder.Services.AddHangfire(config =>
 builder.Services.AddHangfireServer();
 
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<SlotService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<StaffService>();
 builder.Services.AddScoped<BookingService>();
@@ -145,4 +147,5 @@ RecurringJob.AddOrUpdate<BookingService>(
 
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapHub<BookingHub>("/bookingHub");
 app.Run();

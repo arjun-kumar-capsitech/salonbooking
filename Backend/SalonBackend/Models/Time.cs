@@ -3,20 +3,28 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace SalonBackend.Models
 {
-    public class TimeModel
+    public class Time
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } = "";
+        public string Id { get; set; } =  string.Empty;
 
-        public string Day { get; set; } = "";
+        [BsonElement("Day")]
+        public string Day { get; set; } =  string.Empty;
 
-        public string Opening { get; set; } = "";
+        [BsonElement("Opening")]
+        public string Opening { get; set; } = string.Empty;
 
-        public string Closing { get; set; } = "";
+        [BsonElement("Closing")]
+        public string Closing { get; set; } = string.Empty;
 
+        [BsonElement("IsOpen")]
         public bool IsOpen { get; set; }
 
-        public DateTime CreatedAt { get; set; }
+        [BsonElement("UserId")]
+        public string UserId { get; set; } = string.Empty;
+
+        [BsonElement("SalonName")]
+        public string SalonName { get; set; } = string.Empty;
     }
 }

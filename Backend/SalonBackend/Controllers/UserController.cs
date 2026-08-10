@@ -43,7 +43,7 @@ namespace SalonBackend.Controllers
                         HttpOnly = true,
                         Secure = true,
                         SameSite = SameSiteMode.Strict,
-                        Expires = DateTime.UtcNow.AddHours(5),
+                        Expires = DateTime.UtcNow.AddDays(7),
                         Path = "/"
                     });
 
@@ -53,7 +53,8 @@ namespace SalonBackend.Controllers
                         Message = result.Message,
                         Result = new
                         {
-                            User = result.User
+                            User = result.User,
+                            Token = result.Token
                         }
                     });
                 }
@@ -114,7 +115,11 @@ namespace SalonBackend.Controllers
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = result
+                        Result = new
+                        {
+                            User = result.User,
+                            Token = result.Token
+                        }
                     });
                 }
 
@@ -136,7 +141,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [AllowAnonymous]
         [HttpPost("register/admin")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterAdmin([FromBody] RegisterAdminRequest dto)
         {
@@ -160,7 +165,11 @@ namespace SalonBackend.Controllers
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = result
+                        Result = new
+                        {
+                            User = result.User,
+                            Token = result.Token
+                        }
                     });
                 }
 
@@ -206,7 +215,11 @@ namespace SalonBackend.Controllers
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = result
+                        Result = new
+                        {
+                            User = result.User,
+                            Token = result.Token
+                        }
                     });
                 }
 
@@ -228,7 +241,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "SuperAdmin")]
+        [AllowAnonymous]
         [HttpPost("register/superadmin")]
         public async Task<ActionResult<ApiResponse<object>>> RegisterSuperAdmin([FromBody] RegisterSuperAdminRequest dto)
         {
@@ -252,7 +265,11 @@ namespace SalonBackend.Controllers
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = result
+                        Result = new
+                        {
+                            User = result.User,
+                            Token = result.Token
+                        }
                     });
                 }
 
@@ -274,7 +291,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [Authorize]
         [HttpGet]
         public async Task<ActionResult<ApiResponse<object>>> GetAllUsers(
             [FromQuery] int page = 1,
@@ -326,7 +343,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult<ApiResponse<User>>> GetUserById(string id)
         {
@@ -362,7 +379,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<ActionResult<ApiResponse<string>>> UpdateUser(string id, [FromBody] UpdateUserRequest dto)
         {
@@ -408,7 +425,7 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<ActionResult<ApiResponse<bool>>> DeleteUser(string id)
         {

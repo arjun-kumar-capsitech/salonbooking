@@ -6,92 +6,98 @@ namespace SalonBackend.Services
 {
     public class TimeService
     {
-        private readonly IMongoCollection<TimeModel> _timeCollection;
+        private readonly IMongoCollection<Time> _timeCollection;
 
-        public TimeService(IConfiguration configuration)
+        public TimeService(IMongoDatabase database)
         {
-            var client = new MongoClient(
-                configuration.GetConnectionString("MongoDB")
-            );
-
-            var database = client.GetDatabase("SalonBookingDB");
-
-            _timeCollection =
-                database.GetCollection<TimeModel>("Time");
+            _timeCollection = database.GetCollection<Time>("TimeSlots");
         }
 
-        public async Task<List<TimeModel>> GetAllAsync()
+        public async Task<List<Time>> GetAllAsync()
         {
-            return await _timeCollection
-                .Find(_ => true)
-                .ToListAsync();
+            return await _timeCollection.Find(_ => true).ToListAsync();
         }
 
-        public async Task<TimeModel?> GetByDayAsync(string day)
+        public async Task<List<Time>> GetByUserIdAsync(string userId)
         {
-            return await _timeCollection
-                .Find(x => x.Day == day)
-                .FirstOrDefaultAsync();
+            return await _timeCollection.Find(t => t.UserId == userId).ToListAsync();
         }
 
-        public async Task<TimeModel> CreateOrUpdateAsync(TimeDto dto)
+        public async Task<Time?> GetByDayAsync(string day)
+        {
+            return await _timeCollection.Find(t => t.Day == day).FirstOrDefaultAsync();
+        }
+
+        public async Task<Time?> GetByUserIdAndDayAsync(string userId, string day)
+        {
+            return await _timeCollection.Find(t => t.UserId == userId && t.Day == day).FirstOrDefaultAsync();
+        }
+
+        public async Task<Time> CreateOrUpdateAsync(TimeDto dto)
         {
             var existing = await _timeCollection
-                .Find(x => x.Day == dto.Day)
+                .Find(t => t.UserId == dto.UserId && t.Day == dto.Day)
                 .FirstOrDefaultAsync();
 
             if (existing != null)
             {
-                existing.Opening = dto.Opening;
-                existing.Closing = dto.Closing;
-                existing.IsOpen = dto.IsOpen;
+                // Update existing
+                var update = Builders<Time>.Update
+                    .Set(t => t.Opening, dto.Opening)
+                    .Set(t => t.Closing, dto.Closing)
+                    .Set(t => t.IsOpen, dto.IsOpen)
+                    .Set(t => t.SalonName, dto.SalonName);
 
-                await _timeCollection.ReplaceOneAsync(
-                    x => x.Id == existing.Id,
-                    existing
+                await _timeCollection.UpdateOneAsync(
+                    t => t.Id == existing.Id,
+                    update
                 );
 
                 return existing;
             }
-
-            var model = new TimeModel
+            else
             {
-                Day = dto.Day,
-                Opening = dto.Opening,
-                Closing = dto.Closing,
-                IsOpen = dto.IsOpen,
-                CreatedAt = DateTime.UtcNow
-            };
+                // Create new
+                var newTime = new Time
+                {
+                    Day = dto.Day,
+                    Opening = dto.Opening,
+                    Closing = dto.Closing,
+                    IsOpen = dto.IsOpen,
+                    UserId = dto.UserId,
+                    SalonName = dto.SalonName
+                };
 
-            await _timeCollection.InsertOneAsync(model);
-
-            return model;
+                await _timeCollection.InsertOneAsync(newTime);
+                return newTime;
+            }
         }
 
-        public async Task<bool> UpdateAsync(
-            string day,
-            TimeDto dto
-        )
+        public async Task<bool> UpdateAsync(string userId, string day, TimeDto dto)
         {
-            var update = Builders<TimeModel>.Update
-                .Set(x => x.Opening, dto.Opening)
-                .Set(x => x.Closing, dto.Closing)
-                .Set(x => x.IsOpen, dto.IsOpen);
-
-            var result = await _timeCollection.UpdateOneAsync(
-                x => x.Day == day,
-                update
+            var filter = Builders<Time>.Filter.And(
+                Builders<Time>.Filter.Eq(t => t.UserId, userId),
+                Builders<Time>.Filter.Eq(t => t.Day, day)
             );
 
+            var update = Builders<Time>.Update
+                .Set(t => t.Opening, dto.Opening)
+                .Set(t => t.Closing, dto.Closing)
+                .Set(t => t.IsOpen, dto.IsOpen)
+                .Set(t => t.SalonName, dto.SalonName);
+
+            var result = await _timeCollection.UpdateOneAsync(filter, update);
             return result.ModifiedCount > 0;
         }
 
-        public async Task<bool> DeleteAsync(string day)
+        public async Task<bool> DeleteAsync(string userId, string day)
         {
-            var result = await _timeCollection.DeleteOneAsync(
-                x => x.Day == day
+            var filter = Builders<Time>.Filter.And(
+                Builders<Time>.Filter.Eq(t => t.UserId, userId),
+                Builders<Time>.Filter.Eq(t => t.Day, day)
             );
 
+            var result = await _timeCollection.DeleteOneAsync(filter);
             return result.DeletedCount > 0;
         }
     }

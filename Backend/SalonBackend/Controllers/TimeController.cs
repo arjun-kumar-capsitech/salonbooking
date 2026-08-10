@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using SalonBackend.Models;
 using SalonBackend.Models.Dtos;
 using SalonBackend.Services;
-using System;
 
 namespace SalonBackend.Controllers
 {
@@ -17,36 +17,51 @@ namespace SalonBackend.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] string? userId = null)
         {
             try
             {
-                var data = await _timeService.GetAllAsync();
-                return Ok(data);
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var data = await _timeService.GetByUserIdAsync(userId);
+                    return Ok(new { status = true, result = data });
+                }
+
+                var allData = await _timeService.GetAllAsync();
+                return Ok(new { status = true, result = allData });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+                return StatusCode(500, new { status = false, message = $"Error: {ex.Message}" });
             }
         }
 
         [HttpGet("{day}")]
-        public async Task<IActionResult> GetByDay(string day)
+        public async Task<IActionResult> GetByDay(string day, [FromQuery] string? userId = null)
         {
             try
             {
-                var data = await _timeService.GetByDayAsync(day);
+                Time? data;
 
-                if (data == null)
+                if (!string.IsNullOrEmpty(userId))
                 {
-                    return NotFound(new { message = $"Time slots for '{day}' not found" });
+                    data = await _timeService.GetByUserIdAndDayAsync(userId, day);
+                }
+                else
+                {
+                    data = await _timeService.GetByDayAsync(day);
                 }
 
-                return Ok(data);
+                if (data is null)
+                {
+                    return NotFound(new { status = false, message = $"Time slots for '{day}' not found" });
+                }
+
+                return Ok(new { status = true, result = data });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+                return StatusCode(500, new { status = false, message = $"Error: {ex.Message}" });
             }
         }
 
@@ -55,18 +70,17 @@ namespace SalonBackend.Controllers
         {
             try
             {
-                if (dto == null)
+                if (dto is null || string.IsNullOrEmpty(dto.UserId))
                 {
-                    return BadRequest(new { message = "Invalid time slot data" });
+                    return BadRequest(new { status = false, message = "Invalid time slot data or missing UserId" });
                 }
 
                 var data = await _timeService.CreateOrUpdateAsync(dto);
-
-                return Ok(data);
+                return Ok(new { status = true, result = data });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+                return StatusCode(500, new { status = false, message = $"Error: {ex.Message}" });
             }
         }
 
@@ -75,43 +89,48 @@ namespace SalonBackend.Controllers
         {
             try
             {
-                if (dto == null)
+                if (dto is null || string.IsNullOrEmpty(dto.UserId))
                 {
-                    return BadRequest(new { message = "Invalid time slot data" });
+                    return BadRequest(new { status = false, message = "Invalid time slot data or missing UserId" });
                 }
 
-                var success = await _timeService.UpdateAsync(day, dto);
+                var success = await _timeService.UpdateAsync(dto.UserId, day, dto);
 
                 if (!success)
                 {
-                    return NotFound(new { message = $"Time slots for '{day}' not found" });
+                    return NotFound(new { status = false, message = $"Time slots for '{day}' not found for this user" });
                 }
 
-                return Ok(new { message = "Time updated successfully" });
+                return Ok(new { status = true, message = "Time updated successfully" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+                return StatusCode(500, new { status = false, message = $"Error: {ex.Message}" });
             }
         }
 
         [HttpDelete("{day}")]
-        public async Task<IActionResult> Delete(string day)
+        public async Task<IActionResult> Delete(string day, [FromQuery] string userId)
         {
             try
             {
-                var success = await _timeService.DeleteAsync(day);
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return BadRequest(new { status = false, message = "UserId is required" });
+                }
+
+                var success = await _timeService.DeleteAsync(userId, day);
 
                 if (!success)
                 {
-                    return NotFound(new { message = $"Time slots for '{day}' not found" });
+                    return NotFound(new { status = false, message = $"Time slots for '{day}' not found for this user" });
                 }
 
-                return Ok(new { message = "Time deleted successfully" });
+                return Ok(new { status = true, message = "Time deleted successfully" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+                return StatusCode(500, new { status = false, message = $"Error: {ex.Message}" });
             }
         }
     }

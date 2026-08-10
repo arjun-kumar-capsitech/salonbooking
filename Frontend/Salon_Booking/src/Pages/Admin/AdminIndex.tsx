@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, Button, Row, Col } from 'antd';
 import { getSalonBookingAPI } from '../../api/generated';
 
-// ✅ Sahi Names - Ye Change Karo
 const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
 
 const AdminIndex = () => {
@@ -17,15 +16,9 @@ const AdminIndex = () => {
   const userSalonName = user?.SalonName || user?.salonName;
   const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
   const isSuperAdmin = userRole === "SuperAdmin";
-  
-  // ⭐ Token cookie mein hai - localStorage se mat lo!
-  // Token automatic cookie se bheja jayega
-  
+
   const axiosConfig = {
-    headers: {
-      // ⭐ Token manual bhejna band karo - cookie automatic hai!
-      // Authorization: `Bearer ${token}`,  // ❌ Yeh hatao
-    },
+    headers: {},
   };
 
   const ResponseData = (response: any) => {
@@ -39,7 +32,7 @@ const AdminIndex = () => {
     }
     return response.data;
   };
-  
+
   const extractData = (response: any) => {
     if (!response) return [];
     const parsedData = ResponseData(response);
@@ -48,9 +41,9 @@ const AdminIndex = () => {
     }
     return parsedData.result.data;
   };
-  
+
   const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'], 
+    queryKey: ['staff'],
     enabled: !!token,
     queryFn: async () => {
       const res = await getApiStaff(
@@ -75,8 +68,8 @@ const AdminIndex = () => {
   });
 
   const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'], 
-    enabled: !!token, 
+    queryKey: ['services'],
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiAdminServices(axiosConfig);
       const parsedData = ResponseData(res);
@@ -103,10 +96,10 @@ const AdminIndex = () => {
 
   const { data: bookings = [] } = useQuery({
     queryKey: ['bookings'],
-    enabled: !!token, 
+    enabled: !!token,
     queryFn: async () => {
       const res = await getApiBooking(
-        { page: 1, pageSize: 100 }, 
+        { page: 1, pageSize: 100 },
         axiosConfig
       );
       let bookingsData = extractData(res);
@@ -133,7 +126,7 @@ const AdminIndex = () => {
         };
       });
     }
-  }); 
+  });
 
   const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
   const monthlyData = (() => {
@@ -150,9 +143,9 @@ const AdminIndex = () => {
     }));
   })();
 
-  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 30000);
+  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 5000);
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
-  
+
   const serviceColumns = [
     { title: 'Service Name', dataIndex: 'name' },
     { title: 'Duration (min)', dataIndex: 'duration' },
@@ -167,7 +160,7 @@ const AdminIndex = () => {
       render: (status: string) => <StatusBadge type="user" value={status} />
     }
   ];
-  
+
   const staffColumns = [
     { title: 'Name', dataIndex: 'name' },
     { title: 'Role', dataIndex: 'role' },
@@ -177,22 +170,22 @@ const AdminIndex = () => {
       render: (status: string) => <StatusBadge type="user" value={status} />
     }
   ];
-  
+
   if (!token) {
     return (
       <div className="p-6 text-center">
         <Card>
-          <p>Please login to view dashboard</p>
+          <p style={{ fontFamily: 'Public Sans, sans-serif' }}>Please login to view dashboard</p>
         </Card>
       </div>
     );
   }
-  
+
   return (
-    <div className="p-6">
+    <div className="p-6" style={{ fontFamily: 'Public Sans, sans-serif' }}>
       <div>
-        <h1 className="text-2xl font-bold mb-2">Admin Dashboard Overview</h1>
-        <p className="text-gray-600 mb-6">
+        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: 'PT Serif, serif' }}>Admin Dashboard Overview</h1>
+        <p className="text-gray-600 mb-6" style={{ fontFamily: 'Public Sans, sans-serif' }} >
           Hello again! Here's what's happening in your salon.
         </p>
         <Row gutter={[16, 16]} className="mb-6">
@@ -201,7 +194,7 @@ const AdminIndex = () => {
               title="Active Services"
               value={services.filter(s => s.status === 'active').length.toString()}
               icon={<ScissorOutlined />}
-              color="#000000"
+              color="#087e8b"
             />
           </Col>
 
@@ -210,7 +203,7 @@ const AdminIndex = () => {
               title="Active Staff"
               value={`${staffApiData.filter((s: any) => s.status === 'active').length}/${staffApiData.length}`}
               icon={<TeamOutlined />}
-              color="#0400f7"
+              color="#003049"
             />
           </Col>
 
@@ -219,14 +212,14 @@ const AdminIndex = () => {
               title="Total Revenue"
               value={`$${revenue.toLocaleString()}`}
               icon={<DollarOutlined />}
-              color="#ff7b00"
+              color="#6f1d1b"
             />
           </Col>
         </Row>
 
-        <Card className="mb-6" title="Revenue Trend (Monthly)">
+        <Card className="mb-6" title={<span style={{ fontFamily: 'PT Serif, serif' }}>Revenue Trend (Monthly)</span>}>
           <div className="flex h-80">
-            <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
+            <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24" style={{ fontFamily: 'Public Sans, sans-serif' }}>
               {yAxisLabels.map((label, idx) => (
                 <div key={idx}>${Math.round(label).toLocaleString()}</div>
               ))}
@@ -251,12 +244,12 @@ const AdminIndex = () => {
                             minHeight: data.revenue > 0 ? '4px' : '0px'
                           }}
                         >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10" style={{ fontFamily: 'Public Sans, sans-serif' }}>
                             ${data.revenue.toLocaleString()}
                           </div>
                         </div>
                         <div className="text-center mt-2">
-                          <div className="text-xs font-medium text-gray-700">{data.month}</div>
+                          <div className="text-xs font-medium text-gray-700" style={{ fontFamily: 'Public Sans, sans-serif' }}>{data.month}</div>
                         </div>
                       </div>
                     );
@@ -266,16 +259,16 @@ const AdminIndex = () => {
             </div>
           </div>
 
-          <div className="mt-4 pt-3 text-center text-gray-500 text-sm">
+          <div className="mt-4 pt-3 text-center text-gray-500 text-sm" style={{ fontFamily: 'Public Sans, sans-serif' }}>
             <span>Monthly revenue performance (Target: ${maxYValue.toLocaleString()})</span>
           </div>
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
           <Card
-            title="Services"
+            title={<span style={{ fontFamily: 'PT Serif, serif' }}>Services</span>}
             extra={
-              <Button type="primary" size="small" onClick={() => navigate('/admin/services')}>
+              <Button type="primary" size="small" onClick={() => navigate('/admin/services')} style={{ fontFamily: 'Public Sans, sans-serif' }}>
                 View All
               </Button>
             }
@@ -290,9 +283,9 @@ const AdminIndex = () => {
           </Card>
 
           <Card
-            title="Staff Availability"
+            title={<span style={{ fontFamily: 'PT Serif, serif' }}>Staff Availability</span>}
             extra={
-              <Button type="primary" size="small" onClick={() => navigate('/admin/staff')}>
+              <Button type="primary" size="small" onClick={() => navigate('/admin/staff')} style={{ fontFamily: 'Public Sans, sans-serif' }}>
                 View All
               </Button>
             }

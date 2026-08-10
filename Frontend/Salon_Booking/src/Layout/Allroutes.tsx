@@ -53,7 +53,7 @@ const Allrouts = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="deshboard" element={<SuperAdminDeshbord />} />
+       <Route path="deshboard" element={<SuperAdminDeshbord />} />
         <Route path="compani" element={<Compani />} />
         <Route path="request" element={<Request />} />
         <Route path="user" element={<SuperadminUser />} />

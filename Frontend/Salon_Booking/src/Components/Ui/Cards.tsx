@@ -27,38 +27,39 @@ export const StatCard: React.FC<StatCardProps> = ({
 }) => {
   return (
     <>
-      <Card className="h-full border-0 shadow-sm hover:shadow-md">
+      <Card className="h-full rounded-xl border border-gray-100 bg-white shadow-sm hover:shadow-lg transition-all duration-300">
         <div className="flex">
           <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center mr-4"
+            className="w-10 h-10 rounded-full flex items-center justify-center mr-4"
             style={{
               backgroundColor: `${color}20`,
             }}
           >
             <span style={{ color, fontSize: '19px' }}>{icon}</span>
           </div>
-          <div className="flex-1 min-w-0  ">
-            <div className="text-[#216869] font-semibold">{title}</div>
-            <div className="text-2xl font-semibold mt-1 text-[#161a1d]">{value}</div>
-          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold  mb-1 " style={{ color: "#313b0d", fontFamily: "sans-serif", }}>{title}</h4>
+            <div
+              className="text-2xl font-medium mt-1"
+              style={{
+                color: "#073303",
+                fontFamily: "'Outfit', sans-serif",
+              }}
+            >
+              {value}
+            </div>       
+               </div>
         </div>
       </Card>
     </>
   );
 };
 
-export const InfoCard: React.FC<InfoCardProps> = ({
-  title,
-  description,
-  tags = [],
-  status,
-  onView,
-  onEdit
-}) => {
+export const InfoCard: React.FC<InfoCardProps> = ({ title, description, tags = [], status, onView, onEdit }) => {
   return (
     <>
       <Card
-        className="border-0 shadow-sm hover:shadow-md transition-shadow"
+        className="shadow-sm hover:shadow-md transition-shadow"
         actions={onView || onEdit ? [
           onView && <Button size="small" icon={<EyeOutlined />} onClick={onView}>View</Button>,
           onEdit && <Button size="small" icon={<EditOutlined />} onClick={onEdit}>Edit</Button>
@@ -66,7 +67,7 @@ export const InfoCard: React.FC<InfoCardProps> = ({
       >
         <div className="flex justify-between items-start gap-5">
           <div className="flex">
-            <h3 className="font-semibold text-base mb-1 truncate">{title}</h3>
+            <h4 className="font-semibold text-base mb-1">{title}</h4>
             {description && (
               <p className="text-gray-600 text-sm mb-2 ">{description}</p>
             )}

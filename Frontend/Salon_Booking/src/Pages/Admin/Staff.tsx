@@ -10,13 +10,7 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { 
-  getApiStaff, 
-  postApiStaff, 
-  putApiStaffId, 
-  deleteApiStaffId, 
-  postApiUserRegisterEmployee 
-} = getSalonBookingAPI();const { Option } = Select;
+const { getApiStaff, postApiStaff, putApiStaffId, deleteApiStaffId, postApiUserRegisterEmployee } = getSalonBookingAPI();const { Option } = Select;
 const Staff = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
@@ -305,8 +299,8 @@ const Staff = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{isCustomer ? "Our Staff" : "Staff Management"}</h1>
-          <p className="text-gray-600">{isCustomer ? "Meet our professional staff" : "Manage salon staff"}</p>
+          <h1 className="text-2xl font-bold"  style={{ fontFamily: 'PT Serif, serif' }}>{isCustomer ? "Our Staff" : "Staff Management"}</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >{isCustomer ? "Meet our professional staff" : "Manage salon staff"}</p>
         </div>
         {!isCustomer && (
           <Button

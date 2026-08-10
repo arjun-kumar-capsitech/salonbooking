@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { Card, Button, Input, message, Progress, Select, Spin } from "antd";
+import { Card, Button, Input, message, Select, Spin } from "antd";
 import { SearchOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import Modals from "../../Components/Ui/Modals";
@@ -9,14 +9,12 @@ import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
 const { Option } = Select;
-const {  getApiBooking,  getApiStaff,  getApiAdminServices,  putApiBookingId } = getSalonBookingAPI();
+const { getApiBooking, getApiStaff, getApiAdminServices, putApiBookingId } = getSalonBookingAPI();
 
 const EmployeeService = () => {
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
-  const [serviceProgress, setServiceProgress] = useState(0);
-  const [progressInterval, setProgressInterval] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
@@ -79,6 +77,16 @@ const EmployeeService = () => {
 
   const staffId = currentStaff?.id || currentStaff?._id;
 
+  const staffMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    staffList.forEach((s: any) => {
+      const id = String(s.id || s._id);
+      const name = s.fullName || s.FullName || s.name || s.Name || s.staffName || 'Unknown Staff';
+      map[id] = name;
+    });
+    return map;
+  }, [staffList]);
+
   const { data: servicesData = [] } = useQuery({
     queryKey: ['employeeServiceServices'],
     enabled: !!token,
@@ -99,6 +107,33 @@ const EmployeeService = () => {
     });
     return map;
   }, [servicesData]);
+
+  const getServiceDisplay = (booking: any): string => {
+    const serviceIds = booking.serviceIds || booking.ServiceIds || [];
+    if (Array.isArray(serviceIds) && serviceIds.length > 0) {
+      return serviceIds.map((id: string) => serviceMap[String(id)]?.name || 'Unknown').join(', ');
+    }
+    const singleId = String(booking.serviceId || booking.ServiceId || '');
+    if (singleId && serviceMap[singleId]) {
+      return serviceMap[singleId].name;
+    }
+    return booking.serviceName || booking.ServiceName || 'Unknown';
+  };
+
+  const getTotalDuration = (booking: any): number => {
+    const serviceIds = booking.serviceIds || booking.ServiceIds || [];
+    if (Array.isArray(serviceIds) && serviceIds.length > 0) {
+      return serviceIds.reduce((sum: number, id: string) => {
+        const info = serviceMap[String(id)];
+        return sum + (info?.duration || 30);
+      }, 0);
+    }
+    const singleId = String(booking.serviceId || booking.ServiceId || '');
+    if (singleId && serviceMap[singleId]) {
+      return serviceMap[singleId].duration || 30;
+    }
+    return 30;
+  };
 
   const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
     queryKey: ['employeeServicesList', staffId, statusFilter],
@@ -133,22 +168,39 @@ const EmployeeService = () => {
       }
 
       const transformedBookings = rawBookings.map((b: any, index: number) => {
-        const serviceId = String(b.serviceId || b.ServiceId);
-        const customerName = user?.fullName || user?.FullName || user?.name || user?.Name || "Customer";
-        const serviceInfo = serviceMap[serviceId] || { name: "N/A", duration: 30 };
+        const bookingStaffId = String(b.staffId || b.StaffId);
+        const customerName = b.customerName || b.CustomerName || b.customer?.name || b.customer?.Name || "Customer";
+        const staffName = staffMap[bookingStaffId] || "Staff";
         
         let status = (b.status || b.Status || "pending").toLowerCase();
         if (status === "complete") status = "completed";
+
+        const dateStr = b.appointmentDate || b.AppointmentDate || '';
+        const startTime = b.startTime || b.StartTime || '';
+        const endTime = b.endTime || b.EndTime || '';
+
+        const dateFormatted = dayjs(dateStr).format("DD MMM YYYY");
+        let timeFormatted = '';
+        if (startTime && endTime) {
+          timeFormatted = `${startTime} - ${endTime}`;
+        } else if (startTime) {
+          timeFormatted = startTime;
+        } else if (endTime) {
+          timeFormatted = endTime;
+        } else {
+          timeFormatted = dayjs(dateStr).format("hh:mm A");
+        }
 
         return {
           key: b._id || b.id || `${pageParam}-${index}`,
           id: b._id || b.id,
           customerName: customerName,
-          serviceName: serviceInfo.name,
-          duration: serviceInfo.duration,
-          appointmentDate: b.appointmentDate || b.AppointmentDate,
-          date: dayjs(b.appointmentDate || b.AppointmentDate).format("DD MMM YYYY"),
-          time: dayjs(b.appointmentDate || b.AppointmentDate).format("hh:mm A"),
+          staffName: staffName,
+          serviceName: getServiceDisplay(b),
+          duration: getTotalDuration(b),
+          appointmentDate: dateStr,
+          date: dateFormatted,
+          time: timeFormatted,
           status: status,
           salonName: b.salonName || b.SalonName || "N/A",
         };
@@ -205,15 +257,12 @@ const EmployeeService = () => {
     return searchFilteredData || [];
   }, [searchFilteredData]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
-
   const completeServiceMutation = useMutation({
     mutationFn: async (id: string) => {
       await putApiBookingId(id, { status: "completed" }, axiosConfig);
     },
     onSuccess: () => {
       message.success("Service completed successfully!");
-      if (progressInterval) clearInterval(progressInterval);
       queryClient.invalidateQueries({ queryKey: ['employeeServicesList'] });
       handleCloseModal();
     },
@@ -224,41 +273,24 @@ const EmployeeService = () => {
 
   const handleStartService = (record: any) => {
     setSelectedBooking(record);
-    setServiceProgress(0);
     setModalVisible(true);
-    const interval = window.setInterval(() => {
-      setServiceProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 500);
-    setProgressInterval(interval);
   };
 
   const handleCompleteService = () => {
     if (!selectedBooking) return;
-    if (serviceProgress < 100) {
-      message.warning("Please wait for service to complete");
-      return;
-    }
     completeServiceMutation.mutate(selectedBooking.id);
   };
 
   const handleCloseModal = () => {
-    if (progressInterval) clearInterval(progressInterval);
     setModalVisible(false);
     setSelectedBooking(null);
-    setServiceProgress(0);
   };
 
   const columns = [
     { 
       title: "Customer", 
       dataIndex: "customerName", 
-      render: (text: string) => <div className="font-medium text-gray-800">{text}</div> 
+      render: (text: string) => <div className="font-medium text-gray-800">{text || "N/A"}</div> 
     },
     { 
       title: "Date & Time", 
@@ -287,7 +319,7 @@ const EmployeeService = () => {
           size="small" 
           icon={<PlayCircleOutlined />} 
           onClick={() => handleStartService(record)} 
-          disabled={record.status === "completed" || record.status === "cancelled"}
+          disabled={record.status === "completed" || record.status === "cancelled" || record.status === "pending"} 
         >
           Start Service
         </Button>
@@ -317,13 +349,8 @@ const EmployeeService = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">My Service Tasks</h1>
-          <p className="text-gray-600">Manage your assigned service tasks</p>
-          {totalCount > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Showing {filteredBookings.length} of {totalCount} tasks
-            </p>
-          )}
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>My Service Tasks</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage your assigned service tasks</p>
         </div>
       </div>
 
@@ -385,31 +412,33 @@ const EmployeeService = () => {
       <Modals 
         open={modalVisible} 
         onClose={handleCloseModal} 
-        title={`Service in Progress - ${selectedBooking?.customerName || ""}`} 
+        title={`Service - ${selectedBooking?.customerName || ""}`} 
         onSubmit={handleCompleteService} 
-        submitText={serviceProgress >= 100 ? "Complete Service" : "Please Wait..."}
+        submitText="Complete Service"
         loading={completeServiceMutation.isPending}
         cancelText="Close"
       >
         {selectedBooking && (
-          <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="space-y-4">
+            <div>
               <p className="text-sm text-gray-500">Customer</p>
               <p className="font-semibold text-lg">{selectedBooking.customerName}</p>
-              <p className="text-sm text-gray-500 mt-2">Service</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Service</p>
               <p className="font-medium">{selectedBooking.serviceName}</p>
-              <p className="text-sm text-gray-500 mt-2">Duration</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Duration</p>
               <p className="font-medium">{selectedBooking.duration} minutes</p>
             </div>
-            <div className="text-center">
-              <Progress 
-                type="circle" 
-                percent={serviceProgress} 
-                strokeColor={serviceProgress === 100 ? "#52c41a" : "#1890ff"} 
-              />
-              <p className="mt-2 text-gray-500">
-                {serviceProgress < 100 ? "Service in progress..." : "Service completed!"}
-              </p>
+            <div>
+              <p className="text-sm text-gray-500">Date & Time</p>
+              <p className="font-medium">{selectedBooking.date} at {selectedBooking.time}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Status</p>
+              <p className="font-medium capitalize">{selectedBooking.status}</p>
             </div>
           </div>
         )}

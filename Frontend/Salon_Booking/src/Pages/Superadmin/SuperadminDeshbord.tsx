@@ -8,13 +8,15 @@ import { StatCard } from '../../Components/Ui/Cards'
 import { getSalonBookingAPI } from '../../api/generated'
 
 const { Title, Text } = Typography
-const {  getApiUser, getApiBooking } = getSalonBookingAPI()
+const { getApiUser, getApiBooking } = getSalonBookingAPI()
+
 const SuperAdminDashboard = () => {
   const navigate = useNavigate()
   const token = localStorage.getItem("authToken")
   const axiosConfig = {
     headers: { Authorization: `Bearer ${token}` }
   }
+
   const ResponseData = (response: any) => {
     if (!response) return null
     if (typeof response.data === 'string') {
@@ -27,14 +29,18 @@ const SuperAdminDashboard = () => {
     return response.data
   }
 
+  // Fetch users
   const { data: usersData = [], isLoading: usersLoading } = useQuery({
-    queryKey: ['superAdminUsers'],enabled: !!token,
+    queryKey: ['superAdminUsers'],
+    enabled: !!token,
     queryFn: async () => {
-      const res = await getApiUser({ page: 1, pageSize: 100 }, axiosConfig)
+      const res = await getApiUser({ page: 1, pageSize: 1000 }, axiosConfig)
       const parsedData = ResponseData(res)
+      
       if (!parsedData?.status || !parsedData?.result) {
         return []
       }
+      
       let rawUsers = []
       const result = parsedData.result
       
@@ -50,15 +56,34 @@ const SuperAdminDashboard = () => {
     }
   })
 
-  const { data: bookingsData = [] } = useQuery({
-    queryKey: ['superAdminBookings'],enabled: !!token,
+  // Create user map for name lookup
+  const userMap = useMemo(() => {
+    const map: Record<string, any> = {}
+    usersData.forEach((u: any) => {
+      const id = String(u.id || u._id)
+      map[id] = {
+        fullName: u.fullName || u.FullName || u.name || u.Name || 'Unknown',
+        email: u.email || u.Email || 'N/A',
+        phone: u.phoneNumber || u.PhoneNumber || 'N/A',
+        salonName: u.salonName || u.SalonName || 'N/A',
+        role: u.role || u.Role
+      }
+    })
+    return map
+  }, [usersData])
+
+  // Fetch bookings
+  const { data: bookingsData = [], isLoading: bookingsLoading } = useQuery({
+    queryKey: ['superAdminBookings'],
+    enabled: !!token,
     queryFn: async () => {
-      const res = await getApiBooking(undefined, axiosConfig)
+      const res = await getApiBooking({ page: 1, pageSize: 1000 }, axiosConfig)
       const parsedData = ResponseData(res)
       
       if (!parsedData?.status || !parsedData?.result) {
         return []
       }
+      
       let rawBookings = []
       const result = parsedData.result
       
@@ -70,10 +95,52 @@ const SuperAdminDashboard = () => {
         rawBookings = []
       }
 
-      return rawBookings
+      // Transform bookings with proper amount mapping
+      const transformedBookings = rawBookings.map((b: any) => {
+        const customerId = String(b.customerId || b.CustomerId || b.customer?.id || b.customer?._id)
+        const customerInfo = userMap[customerId] || {}
+        
+        // Get amount from multiple possible fields
+        let amount = 0
+        if (b.amount) amount = parseFloat(b.amount)
+        else if (b.Amount) amount = parseFloat(b.Amount)
+        else if (b.totalAmount) amount = parseFloat(b.totalAmount)
+        else if (b.TotalAmount) amount = parseFloat(b.TotalAmount)
+        else if (b.price) amount = parseFloat(b.price)
+        else if (b.Price) amount = parseFloat(b.Price)
+        else if (b.total) amount = parseFloat(b.total)
+        else if (b.Total) amount = parseFloat(b.Total)
+        
+        // Get customer name from booking or user map
+        const customerName = b.customerName || b.CustomerName || 
+                            customerInfo.fullName || 
+                            b.customer?.name || b.customer?.Name || 
+                            'Customer'
+        
+        // Get status
+        const status = (b.status || b.Status || "pending").toLowerCase()
+        
+        // Get date
+        const bookingDate = b.appointmentDate || b.AppointmentDate || 
+                           b.date || b.Date ||
+                           b.createdAt || b.CreatedAt
+        
+        return {
+          ...b,
+          id: b._id || b.id,
+          customerName: customerName,
+          customerInfo: customerInfo,
+          amount: isNaN(amount) ? 0 : amount,
+          status: status,
+          appointmentDate: bookingDate
+        }
+      })
+
+      return transformedBookings
     }
   })
 
+  // Companies (Role = 2)
   const companies = useMemo(() => {
     const admins = usersData.filter((u: any) => {
       const role = u.role || u.Role
@@ -89,6 +156,7 @@ const SuperAdminDashboard = () => {
     }))
   }, [usersData])
 
+  // Customers (Role = 4)
   const customers = useMemo(() => {
     return usersData.filter((u: any) => {
       const role = u.role || u.Role
@@ -96,6 +164,7 @@ const SuperAdminDashboard = () => {
     })
   }, [usersData])
 
+  // Employees (Role = 3)
   const employees = useMemo(() => {
     return usersData.filter((u: any) => {
       const role = u.role || u.Role
@@ -103,30 +172,40 @@ const SuperAdminDashboard = () => {
     })
   }, [usersData])
 
+  // Total Revenue
   const totalRevenue = useMemo(() => {
     let total = 0
     bookingsData.forEach((booking: any) => {
-      const status = (booking.status || booking.Status || "").toLowerCase()
-      if (status === 'completed' || status === 'confirmed') {
-        const amount = parseFloat(booking.amount || booking.Amount || booking.totalAmount || booking.TotalAmount || 0)
+      const status = (booking.status || "").toLowerCase()
+      if (status === 'completed' || status === 'confirmed' || status === 'pending') {
+        const amount = booking.amount || 0
         total += isNaN(amount) ? 0 : amount
       }
     })
     return total
   }, [bookingsData])
 
+  // Monthly Revenue Data
   const monthlyData = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     const revenueByMonth = new Array(12).fill(0)
+    
     bookingsData.forEach((booking: any) => {
-      const status = (booking.status || booking.Status || "").toLowerCase()
-      if (status === 'completed' || status === 'confirmed') {
-        const amount = parseFloat(booking.amount || booking.Amount || booking.totalAmount || booking.TotalAmount || 0)
-        if (!isNaN(amount)) {
-          const bookingDate = booking.appointmentDate || booking.AppointmentDate || booking.createdAt || booking.CreatedAt || booking.date || booking.Date
+      const status = (booking.status || "").toLowerCase()
+      if (status === 'completed' || status === 'confirmed' || status === 'pending') {
+        const amount = booking.amount || 0
+        if (!isNaN(amount) && amount > 0) {
+          const bookingDate = booking.appointmentDate || 
+                             booking.AppointmentDate || 
+                             booking.date || 
+                             booking.Date ||
+                             booking.createdAt ||
+                             booking.CreatedAt
+          
           if (bookingDate) {
-            const month = new Date(bookingDate).getMonth()
-            if (!isNaN(month)) {
+            const date = new Date(bookingDate)
+            const month = date.getMonth()
+            if (!isNaN(month) && month >= 0 && month < 12) {
               revenueByMonth[month] += amount
             }
           }
@@ -141,7 +220,7 @@ const SuperAdminDashboard = () => {
     }))
   }, [bookingsData])
 
-  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 1000)
+  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 10000)
   const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0]
 
   const stats = [
@@ -212,8 +291,8 @@ const SuperAdminDashboard = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <Title level={3} className="!mb-2">Super Admin Dashboard</Title>
-        <Text type="secondary">System overview and analytics</Text>
+        <Title level={3} className="!mb-2" style={{ fontFamily: 'PT Serif, serif' }}>Super Admin Dashboard</Title>
+        <Text type="secondary"  style={{ fontFamily: 'Public Sans, sans-serif' }}>System overview and analytics</Text>
       </div>
 
       <Row gutter={[24, 24]} className="mb-8">
@@ -240,12 +319,16 @@ const SuperAdminDashboard = () => {
               </div>
               <div className="relative h-full flex items-end gap-2">
                 {monthlyData.map((data, idx) => {
-                  const barHeight = Math.min((data.revenue / maxYValue) * 100, 100)
+                  const barHeight = maxYValue > 0 ? Math.min((data.revenue / maxYValue) * 100, 100) : 0
                   return (
                     <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group">
                       <div
                         className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all duration-300 group-hover:from-blue-700 group-hover:to-blue-500 cursor-pointer"
-                        style={{ height: `${barHeight}%`, minHeight: data.revenue > 0 ? '4px' : '0px' }}
+                        style={{ 
+                          height: `${barHeight}%`, 
+                          minHeight: data.revenue > 0 ? '4px' : '0px',
+                          opacity: data.revenue > 0 ? 1 : 0.3
+                        }}
                       >
                         <div className="text-center -mt-6 opacity-0 group-hover:opacity-100 transition-opacity">
                           <span className="bg-gray-800 text-white text-xs rounded px-2 py-1">
@@ -274,7 +357,7 @@ const SuperAdminDashboard = () => {
           extra={<Button type="primary" size="small" onClick={() => navigate('/Super-admin/compani')}>View All</Button>}
           className="shadow-sm border border-gray-100"
         >
-          <DataTable data={companies.slice(0, 5)} columns={companyColumns} loading={usersLoading} rowKey="id" showActions={false} />
+          <DataTable data={companies.slice(0, 5)} columns={companyColumns} loading={usersLoading || bookingsLoading} rowKey="id" showActions={false} />
           {companies.length > 5 && (
             <div className="text-center mt-4">
               <Button type="link" onClick={() => navigate('/Super-admin/compani')}>+ {companies.length - 5} more companies</Button>
