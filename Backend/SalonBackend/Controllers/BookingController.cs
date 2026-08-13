@@ -25,48 +25,38 @@ namespace SalonBackend.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<object>>> GetAllBooking(
-            int page = 1,
-            int pageSize = 4)
+        public async Task<ActionResult<ApiResponse<PaginationDto<Booking>>>> GetAllBooking(
+          int page = 1,
+          int pageSize = 10)
         {
             try
             {
-                if (page == 0 || pageSize == 0)
-                {
-                    var allBookings = await _bookingService.GetAllAsync();
-                    return Ok(new ApiResponse<List<Booking>>
-                    {
-                        Status = true,
-                        Message = "Bookings retrieved successfully",
-                        Result = allBookings
-                    });
-                }
+                var (data, totalCount) =
+                    await _bookingService.GetPagedAsync(page, pageSize);
 
-                var (data, totalCount) = await _bookingService.GetPagedAsync(page, pageSize);
-                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                var totalPages =
+                    (int)Math.Ceiling(totalCount / (double)pageSize);
 
-                return Ok(new ApiResponse<object>
+                return Ok(new ApiResponse<PaginationDto<Booking>>
                 {
                     Status = true,
                     Message = "Bookings retrieved successfully",
-                    Result = new
+
+                    Result = new PaginationDto<Booking>
                     {
                         Data = data,
-                        Pagination = new
-                        {
-                            CurrentPage = page,
-                            PageSize = pageSize,
-                            TotalCount = totalCount,
-                            TotalPages = totalPages,
-                            HasNextPage = page < totalPages,
-                            HasPreviousPage = page > 1
-                        }
+                        CurrentPage = page,
+                        PageSize = pageSize,
+                        TotalCount = totalCount,
+                        TotalPages = totalPages,
+                        HasNextPage = page < totalPages,
+                        HasPreviousPage = page > 1
                     }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<PaginationDto<Booking>>
                 {
                     Status = false,
                     Message = ex.Message,
@@ -147,7 +137,7 @@ namespace SalonBackend.Controllers
                     CustomerName = dto.CustomerName.Trim(),
                     StaffId = dto.StaffId,
                     ServiceId = dto.ServiceId,
-                    ServiceIds = dto.ServiceIds ?? new(),  
+                    ServiceIds = dto.ServiceIds ?? new(),
                     AppointmentDate = dto.AppointmentDate,
                     SalonName = dto.SalonName,
                     Amount = dto.Amount,
@@ -157,9 +147,7 @@ namespace SalonBackend.Controllers
                 };
 
                 var created = await _bookingService.CreateAsync(booking);
-
                 await _hubContext.Clients.All.SendAsync("SlotBooked", created);
-
                 return Ok(new ApiResponse<Booking>
                 {
                     Status = true,
@@ -217,14 +205,11 @@ namespace SalonBackend.Controllers
                 }
 
                 var updatedBooking = await _bookingService.GetByIdAsync(id);
-
                 await _hubContext.Clients.All.SendAsync("BookingUpdated", updatedBooking);
-
                 if (dto.Status.ToLower() == "completed" || dto.Status.ToLower() == "cancelled")
                 {
                     await _hubContext.Clients.All.SendAsync("SlotReleased", id);
                 }
-
                 return Ok(new ApiResponse<string>
                 {
                     Status = true,

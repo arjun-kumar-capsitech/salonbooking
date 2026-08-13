@@ -41,7 +41,6 @@ namespace SalonBackend.Services
 
             if (existing != null)
             {
-                // Update existing
                 var update = Builders<Time>.Update
                     .Set(t => t.Opening, dto.Opening)
                     .Set(t => t.Closing, dto.Closing)
@@ -57,7 +56,6 @@ namespace SalonBackend.Services
             }
             else
             {
-                // Create new
                 var newTime = new Time
                 {
                     Day = dto.Day,

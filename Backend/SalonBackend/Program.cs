@@ -1,15 +1,16 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
-using SalonBackend.Services;
 using System.Text;
 using Hangfire;
 using Hangfire.Mongo;
-using Hangfire.Mongo.Migration.Strategies;
-using Hangfire.Mongo.Migration.Strategies.Backup;
 using NetEscapades.AspNetCore.SecurityHeaders;
+using SalonBackend;
 using SalonBackend.Hubs;
+using SalonBackend.Services;
+using SalonBackend.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,15 +18,19 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials();
     });
 });
+
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSecurityHeaders();
+
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -36,46 +41,35 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-try
-{
-    var mongoClient = new MongoClient(builder.Configuration.GetConnectionString("MongoDB") ?? "mongodb://localhost:27017");
-    var database = mongoClient.GetDatabase(builder.Configuration["MongoDB:DatabaseName"] ?? "SalonBookingDB");
-    builder.Services.AddSingleton<IMongoDatabase>(database);
-    database.ListCollectionNames();
-    Console.WriteLine("MongoDB connected successfully!");
-}
-catch (Exception ex)
-{
-    Console.WriteLine($"MongoDB Connection Failed: {ex.Message}");
-}
+var mongoConnectionString =
+    builder.Configuration.GetConnectionString("MongoDB")
+    ?? "mongodb://localhost:27017";
 
-var mongoStorageOptions = new MongoStorageOptions
-{
-    MigrationOptions = new MongoMigrationOptions
-    {
-        MigrationStrategy = new DropMongoMigrationStrategy(),
-        BackupStrategy = new CollectionMongoBackupStrategy()
-    }
-};
+var databaseName =
+    builder.Configuration["MongoDB:DatabaseName"]
+    ?? "SalonBookingDB";
 
+var mongoClient = new MongoClient(mongoConnectionString);
+var database = mongoClient.GetDatabase(databaseName);
+
+builder.Services.AddSingleton<IMongoDatabase>(database);
 builder.Services.AddHangfire(config =>
+{
     config.UseMongoStorage(
-        builder.Configuration.GetConnectionString("MongoDB") ?? "mongodb://localhost:27017",
-        "SalonBookingDB",
-        mongoStorageOptions));
+        mongoConnectionString,
+        databaseName
+    );
+});
+
 builder.Services.AddHangfireServer();
+builder.Services.AddApplicationServices();
 
-builder.Services.AddScoped<UserService>();
-builder.Services.AddScoped<SlotService>();
-builder.Services.AddScoped<AdminService>();
-builder.Services.AddScoped<StaffService>();
-builder.Services.AddScoped<BookingService>();
-builder.Services.AddScoped<TimeService>();
-builder.Services.AddScoped<CompanyService>();
+var jwtSecret =
+    builder.Configuration["Jwt:Secret"]
+    ?? "your-super-secret-jwt-key-minimum-32-characters-long-here";
 
-var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "your-super-secret-jwt-key-minimum-32-characters-long-here";
-
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
@@ -84,17 +78,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSecret)
+            )
         };
+
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
                 var token = context.Request.Cookies["jwt_token"];
+
                 if (!string.IsNullOrEmpty(token))
                 {
                     context.Token = token;
                 }
+
                 return Task.CompletedTask;
             }
         };
@@ -102,50 +101,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.Configure<CookiePolicyOptions>(options =>
 {
-    options.HttpOnly = Microsoft.AspNetCore.CookiePolicy.HttpOnlyPolicy.Always;
+    options.HttpOnly = HttpOnlyPolicy.Always;
     options.Secure = CookieSecurePolicy.Always;
     options.MinimumSameSitePolicy = SameSiteMode.Strict;
 });
 
 var app = builder.Build();
 
-var securityHeadersPolicy = new HeaderPolicyCollection()
-    .AddFrameOptionsDeny()
-    .AddContentTypeOptionsNoSniff()
-    .AddXssProtectionEnabled()
-    .AddReferrerPolicyStrictOriginWhenCrossOrigin()
-    .AddStrictTransportSecurityMaxAgeIncludeSubDomains()
-    .AddPermissionsPolicy(builder =>
-    {
-        builder.AddGeolocation().None();
-        builder.AddCamera().None();
-        builder.AddMicrophone().None();
-        builder.AddUsb().None();
-        builder.AddPayment().None();
-        builder.AddFullscreen().Self();
-        builder.AddAutoplay().Self();
-    })
-    .RemoveServerHeader();
+app.UseCors("AllowFrontend");
+
+var securityHeadersPolicy =
+    app.Services.GetRequiredService<HeaderPolicyCollection>();
 
 app.UseSecurityHeaders(securityHeadersPolicy);
-app.UseCors("AllowFrontend");
+
 app.UseSwagger();
+
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Salon Booking API v1");
+    c.SwaggerEndpoint(
+        "/swagger/v1/swagger.json",
+        "Salon Booking API v1"
+    );
+
     c.RoutePrefix = "swagger";
 });
+
 app.UseHttpsRedirection();
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseHangfireDashboard();
-
 RecurringJob.AddOrUpdate<BookingService>(
     "clear-pending-bookings",
     service => service.ClearPendingBookings(),
-    Cron.Daily);
-
+    Cron.Daily
+);
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapHub<BookingHub>("/bookingHub");
+app.MapGet("/", () => Results.Redirect("/swagger"));
 app.Run();

@@ -25,7 +25,6 @@ const AdminDashboard = () => {
 
   return <Deshbord menuItems={menuItems}/>;
 };
-
 export default AdminDashboard;
 
 // .format("hh:mm A")

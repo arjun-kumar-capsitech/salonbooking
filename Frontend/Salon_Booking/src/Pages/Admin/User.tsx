@@ -10,7 +10,7 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const {  getApiUser,  getApiStaff,  putApiUserId,  postApiUserRegisterEmployee,  postApiUserRegisterCustomer,  deleteApiUserId } = getSalonBookingAPI();
+const { getApiUser, getApiStaff, putApiUserId, postApiUserRegisterEmployee, postApiUserRegisterCustomer, deleteApiUserId } = getSalonBookingAPI();
 
 const { Option } = Select;
 
@@ -56,23 +56,19 @@ const User = () => {
     form.resetFields();
   };
 
- const { data: staffData, isLoading: staffLoading } = useQuery({
-  queryKey: ['staffList'],
-  queryFn: async () => {
-    const response = await getApiStaff(undefined, axiosConfig);
-    const parsedData = ResponseData(response);
-
-    if (parsedData?.status === true && parsedData?.result) {
-      const result = parsedData.result;
-      if (Array.isArray(result)) {
-        return result;
-      } else if (result.data && Array.isArray(result.data)) {
-        return result.data;
+  const { data: staffData, isLoading: staffLoading } = useQuery({
+    queryKey: ['staffList'],
+    queryFn: async () => {
+      const response = await getApiStaff(undefined, axiosConfig);
+      const parsedData = ResponseData(response);
+      if (parsedData?.status === true && parsedData?.result) {
+        const result = parsedData.result;
+        if (Array.isArray(result)) return result;
+        if (result.data && Array.isArray(result.data)) return result.data;
       }
-    }
-    return [];
-  },
-});
+      return [];
+    },
+  });
 
   const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading } = useInfiniteQuery({
     queryKey: ['allUsers', roleFilter, statusFilter],
@@ -81,36 +77,25 @@ const User = () => {
       try {
         const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
         const parsedData = ResponseData(response);
-
         if (!parsedData?.status || !parsedData?.result) {
-          return {
-            data: [],
-            totalCount: 0,
-            hasNextPage: false,
-            nextPage: pageParam + 1
-          };
+          return { data: [], totalCount: 0, hasNextPage: false, nextPage: pageParam + 1 };
         }
 
-        let rawUsers = [];
-        let pagination = null;
         const result = parsedData.result;
+        // result is UserPaginationDto: { data, totalCount, hasNextPage, ... }
+        let rawUsers = result.data || [];
+        const totalCount = result.totalCount || 0;
+        const hasNext = result.hasNextPage || false;
 
-        if (Array.isArray(result)) {
-          rawUsers = result;
-          pagination = parsedData.pagination || null;
-        } else if (result?.data && Array.isArray(result.data)) {
-          rawUsers = result.data;
-          pagination = result.pagination || parsedData.pagination || null;
-        } else {
-          rawUsers = [];
-        }
-
+        // Filter by role (only Employee=3, Customer=4)
         let filteredUsers = rawUsers.filter((u: any) => u.role === 3 || u.role === 4);
 
+        // Customer sees only themselves
         if (isCustomer) {
           filteredUsers = filteredUsers.filter((u: any) => u.id === user.id || u._id === user._id);
         }
 
+        // Admin sees only their salon's employees + customers
         if (isAdmin && !isSuperAdmin && userSalonName) {
           const adminSalon = userSalonName.toString().trim().toLowerCase();
           const staffEmails = (staffData || [])
@@ -122,7 +107,7 @@ const User = () => {
             .filter(Boolean);
 
           filteredUsers = filteredUsers.filter((u: any) => {
-            if (u.role === 4) return true;
+            if (u.role === 4) return true; // Customers always visible
             if (u.role === 3) {
               const userEmail = (u.email || "").toLowerCase();
               return staffEmails.includes(userEmail);
@@ -131,8 +116,25 @@ const User = () => {
           });
         }
 
-        const transformedUsers = filteredUsers.map((u: any, index: number) => ({
-          key: u.id || u._id || `${pageParam}-${index}`,
+        // Client‑side role and status filters
+        if (roleFilter !== 'all') {
+          filteredUsers = filteredUsers.filter((u: any) => {
+            if (roleFilter === 'Employee') return u.role === 3;
+            if (roleFilter === 'Customer') return u.role === 4;
+            return true;
+          });
+        }
+        if (statusFilter !== 'all') {
+          filteredUsers = filteredUsers.filter((u: any) => {
+            if (statusFilter === 'active') return u.isActive === true;
+            if (statusFilter === 'inactive') return u.isActive === false;
+            return true;
+          });
+        }
+
+        // Transform to display format
+        const transformed = filteredUsers.map((u: any) => ({
+          key: u.id || u._id,
           id: u.id || u._id,
           fullName: u.fullName || u.FullName || u.name || 'Unknown',
           email: u.email || u.Email || 'No Email',
@@ -143,53 +145,26 @@ const User = () => {
           salonName: u.salonName || u.SalonName || ''
         }));
 
-        let finalData = transformedUsers;
-
-        if (roleFilter !== 'all') {
-          finalData = finalData.filter((u: any) => {
-            if (roleFilter === 'Employee') return u.role === 3;
-            if (roleFilter === 'Customer') return u.role === 4;
-            return true;
-          });
-        }
-
-        if (statusFilter !== 'all') {
-          finalData = finalData.filter((u: any) => {
-            if (statusFilter === 'active') return u.isActive === true;
-            if (statusFilter === 'inactive') return u.isActive === false;
-            return true;
-          });
-        }
-
-        const totalCount = pagination?.totalCount || filteredUsers.length || finalData.length;
-        const hasNext = pagination?.hasNextPage || false;
-
+        // Return the page data
         return {
-          data: finalData,
-          totalCount: totalCount,
+          data: transformed,
+          totalCount: totalCount,        // server total (unfiltered)
           hasNextPage: hasNext,
           nextPage: pageParam + 1,
         };
       } catch (error) {
         console.error('Error fetching users:', error);
-        return {
-          data: [],
-          totalCount: 0,
-          hasNextPage: false,
-          nextPage: pageParam + 1,
-        };
+        return { data: [], totalCount: 0, hasNextPage: false, nextPage: pageParam + 1 };
       }
     },
     getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
     enabled: staffData !== undefined,
   });
 
+  // Intersection Observer to trigger load more
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
+    if (observerRef.current) observerRef.current.disconnect();
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
@@ -226,6 +201,7 @@ const User = () => {
     return searchFilteredData || [];
   }, [searchFilteredData]);
 
+  // Total count – use server total from first page (or last known)
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
   const staffList = useMemo(() => {
@@ -237,12 +213,11 @@ const User = () => {
     }));
   }, [staffData]);
 
+  // Mutations (unchanged)
   const createEmployeeMutation = useMutation({
     mutationFn: async (payload: any) => {
       const response = await postApiUserRegisterEmployee(payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Employee registration failed");
-      }
+      if (!response.data?.status) throw new Error(response.data?.message || "Employee registration failed");
       return response;
     },
     onSuccess: () => {
@@ -258,9 +233,7 @@ const User = () => {
   const createCustomerMutation = useMutation({
     mutationFn: async (payload: any) => {
       const response = await postApiUserRegisterCustomer(payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Customer registration failed");
-      }
+      if (!response.data?.status) throw new Error(response.data?.message || "Customer registration failed");
       return response;
     },
     onSuccess: () => {
@@ -276,9 +249,7 @@ const User = () => {
   const updateUserMutation = useMutation({
     mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
       const response = await putApiUserId(id, payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Update failed");
-      }
+      if (!response.data?.status) throw new Error(response.data?.message || "Update failed");
       return response;
     },
     onSuccess: () => {
@@ -294,9 +265,7 @@ const User = () => {
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await deleteApiUserId(id, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Delete failed");
-      }
+      if (!response.data?.status) throw new Error(response.data?.message || "Delete failed");
       return response;
     },
     onSuccess: () => {
@@ -381,11 +350,11 @@ const User = () => {
   const isLoading = (usersLoading && !infiniteData) || staffLoading;
 
   return (
-    <div className="p-6 ">
+    <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold"  style={{ fontFamily: 'PT Serif, serif' }}>User Management</h1>
-          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >Manage Employee and Customer users</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>User Management</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage Employee and Customer users</p>
         </div>
         <Button
           type="primary"
@@ -402,7 +371,7 @@ const User = () => {
       </div>
 
       <Card className="mb-6">
-        <div className="flex gap-4 flex-wrap ">
+        <div className="flex gap-4 flex-wrap">
           <Input
             placeholder="Search users..."
             prefix={<SearchOutlined />}
@@ -461,9 +430,9 @@ const User = () => {
             </div>
           )}
 
-          {!hasNextPage && filteredUsers.length > 0 && filteredUsers.length === totalCount && (
+          {!hasNextPage && filteredUsers.length > 0 && (
             <div className="text-center py-4 text-green-600">
-              ✅ All {totalCount} users loaded
+              ✅ All {filteredUsers.length} users loaded (out of {totalCount} total)
             </div>
           )}
 

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SalonBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1b06a39aaba133bc257e3fad953e2036def2b378")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5d4f20003318b374ee4b9edf613561b4c54a4b76")]
 [assembly: System.Reflection.AssemblyProductAttribute("SalonBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SalonBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -14,28 +14,28 @@ import type {
 
 // https://stackoverflow.com/questions/49579094/typescript-conditional-types-filter-out-readonly-properties-pick-only-requir/49579497#49579497
 type IfEquals<X, Y, A = X, B = never> = (<T>() => T extends X ? 1 : 2) extends <
-T,
+  T,
 >() => T extends Y ? 1 : 2
-? A
-: B;
+  ? A
+  : B;
 
 type WritableKeys<T> = {
-[P in keyof T]-?: IfEquals<
-  { [Q in P]: T[P] },
-  { -readonly [Q in P]: T[P] },
-  P
->;
+  [P in keyof T]-?: IfEquals<
+    { [Q in P]: T[P] },
+    { -readonly [Q in P]: T[P] },
+    P
+  >;
 }[keyof T];
 
 type UnionToIntersection<U> =
-  (U extends any ? (k: U)=>void : never) extends ((k: infer I)=>void) ? I : never;
+  (U extends any ? (k: U) => void : never) extends ((k: infer I) => void) ? I : never;
 type DistributeReadOnlyOverUnions<T> = T extends any ? NonReadonly<T> : never;
 
 type Writable<T> = Pick<T, WritableKeys<T>>;
 type NonReadonly<T> = [T] extends [UnionToIntersection<T>] ? {
   [P in keyof Writable<T>]: T[P] extends object
-    ? NonReadonly<NonNullable<T[P]>>
-    : T[P];
+  ? NonReadonly<NonNullable<T[P]>>
+  : T[P];
 } : DistributeReadOnlyOverUnions<T>;
 
 export interface AdminServiceDto {
@@ -83,6 +83,8 @@ export interface Booking {
   /** @nullable */
   staffId?: string | null;
   /** @nullable */
+  serviceIds?: string[] | null;
+  /** @nullable */
   serviceId?: string | null;
   /** @nullable */
   salonName?: string | null;
@@ -114,6 +116,8 @@ export interface BookingDto {
   customerName?: string | null;
   /** @nullable */
   serviceId?: string | null;
+  /** @nullable */
+  serviceIds?: string[] | null;
   appointmentDate?: string;
   /** @nullable */
   salonName?: string | null;
@@ -122,6 +126,24 @@ export interface BookingDto {
   startTime?: string | null;
   /** @nullable */
   endTime?: string | null;
+}
+
+export interface BookingPaginationDto {
+  /** @nullable */
+  data?: Booking[] | null;
+  currentPage?: number;
+  pageSize?: number;
+  totalCount?: number;
+  totalPages?: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
+}
+
+export interface BookingPaginationDtoApiResponse {
+  /** @nullable */
+  message?: string | null;
+  status?: boolean;
+  result?: BookingPaginationDto;
 }
 
 export interface BooleanApiResponse {
@@ -155,17 +177,27 @@ export interface LoginRequest {
   password?: string | null;
 }
 
-/**
- * @nullable
- */
-export type ObjectApiResponseResult = unknown | null;
+export interface LoginResponse {
+  /** @nullable */
+  token?: string | null;
+  /** @nullable */
+  userId?: string | null;
+  /** @nullable */
+  fullName?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  role?: string | null;
+  /** @nullable */
+  companyId?: string | null;
+  expiresAt?: string;
+}
 
-export interface ObjectApiResponse {
+export interface LoginResponseApiResponse {
   /** @nullable */
   message?: string | null;
   status?: boolean;
-  /** @nullable */
-  result?: ObjectApiResponseResult;
+  result?: LoginResponse;
 }
 
 export interface RegisterAdminRequest {
@@ -277,6 +309,24 @@ export interface StaffListApiResponse {
   result?: Staff[] | null;
 }
 
+export interface StaffPaginationDto {
+  /** @nullable */
+  data?: Staff[] | null;
+  currentPage?: number;
+  pageSize?: number;
+  totalCount?: number;
+  totalPages?: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
+}
+
+export interface StaffPaginationDtoApiResponse {
+  /** @nullable */
+  message?: string | null;
+  status?: boolean;
+  result?: StaffPaginationDto;
+}
+
 export interface StringApiResponse {
   /** @nullable */
   message?: string | null;
@@ -356,6 +406,24 @@ export interface UserApiResponse {
   result?: User;
 }
 
+export interface UserPaginationDto {
+  /** @nullable */
+  data?: User[] | null;
+  currentPage?: number;
+  pageSize?: number;
+  totalCount?: number;
+  totalPages?: number;
+  hasNextPage?: boolean;
+  hasPreviousPage?: boolean;
+}
+
+export interface UserPaginationDtoApiResponse {
+  /** @nullable */
+  message?: string | null;
+  status?: boolean;
+  result?: UserPaginationDto;
+}
+
 export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 
@@ -368,409 +436,416 @@ export const UserRole = {
 } as const;
 
 export type GetApiBookingParams = {
-page?: number;
-pageSize?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export type GetApiStaffParams = {
-page?: number;
-pageSize?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export type GetApiTimeParams = {
-userId?: string;
+  userId?: string;
 };
 
 export type GetApiTimeDayParams = {
-userId?: string;
+  userId?: string;
 };
 
 export type DeleteApiTimeDayParams = {
-userId?: string;
+  userId?: string;
 };
 
 export type GetApiUserParams = {
-page?: number;
-pageSize?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export const getSalonBookingAPI = () => {
-const getApiAdminServices = <TData = AxiosResponse<AdminServicesListApiResponse>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
+  const getApiAdminServices = <TData = AxiosResponse<AdminServicesListApiResponse>>(
+    options?: AxiosRequestConfig
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/AdminServices`,options
+      `http://localhost:5296/api/AdminServices`, options
     );
   }
 
-const postApiAdminServices = <TData = AxiosResponse<AdminServicesApiResponse>>(
+  const postApiAdminServices = <TData = AxiosResponse<AdminServicesApiResponse>>(
     adminServiceDto: AdminServiceDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/AdminServices`,
-      adminServiceDto,options
+      adminServiceDto, options
     );
   }
 
-const getApiAdminServicesId = <TData = AxiosResponse<AdminServicesApiResponse>>(
+  const getApiAdminServicesId = <TData = AxiosResponse<AdminServicesApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/AdminServices/${id}`,options
+      `http://localhost:5296/api/AdminServices/${id}`, options
     );
   }
 
-const putApiAdminServicesId = <TData = AxiosResponse<AdminServicesApiResponse>>(
+  const putApiAdminServicesId = <TData = AxiosResponse<AdminServicesApiResponse>>(
     id: string,
     adminServiceDto: AdminServiceDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/AdminServices/${id}`,
-      adminServiceDto,options
+      adminServiceDto, options
     );
   }
 
-const deleteApiAdminServicesId = <TData = AxiosResponse<BooleanApiResponse>>(
+  const deleteApiAdminServicesId = <TData = AxiosResponse<BooleanApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/AdminServices/${id}`,options
+      `http://localhost:5296/api/AdminServices/${id}`, options
     );
   }
 
-const getApiAdminServicesBySalonSalonName = <TData = AxiosResponse<AdminServicesListApiResponse>>(
+  const getApiAdminServicesBySalonSalonName = <TData = AxiosResponse<AdminServicesListApiResponse>>(
     salonName: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/AdminServices/by-salon/${salonName}`,options
+      `http://localhost:5296/api/AdminServices/by-salon/${salonName}`, options
     );
   }
 
-const getApiBooking = <TData = AxiosResponse<ObjectApiResponse>>(
+  const getApiBooking = <TData = AxiosResponse<BookingPaginationDtoApiResponse>>(
     params?: GetApiBookingParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Booking`,{
-        responseType: 'text',
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/Booking`, {
+      responseType: 'text',
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const postApiBooking = <TData = AxiosResponse<BookingApiResponse>>(
+  const postApiBooking = <TData = AxiosResponse<BookingApiResponse>>(
     bookingDto: BookingDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/Booking`,
-      bookingDto,options
+      bookingDto, options
     );
   }
 
-const getApiBookingId = <TData = AxiosResponse<BookingApiResponse>>(
+  const getApiBookingId = <TData = AxiosResponse<BookingApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Booking/${id}`,options
+      `http://localhost:5296/api/Booking/${id}`, options
     );
   }
 
-const putApiBookingId = <TData = AxiosResponse<StringApiResponse>>(
+  const putApiBookingId = <TData = AxiosResponse<StringApiResponse>>(
     id: string,
     updateBookingStatusDto: UpdateBookingStatusDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/Booking/${id}`,
-      updateBookingStatusDto,options
+      updateBookingStatusDto, options
     );
   }
 
-const deleteApiBookingId = <TData = AxiosResponse<StringApiResponse>>(
+  const deleteApiBookingId = <TData = AxiosResponse<StringApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/Booking/${id}`,options
+      `http://localhost:5296/api/Booking/${id}`, options
     );
   }
 
-const getApiCompany = <TData = AxiosResponse<void>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
+  const getApiCompany = <TData = AxiosResponse<void>>(
+    options?: AxiosRequestConfig
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Company`,options
+      `http://localhost:5296/api/Company`, options
     );
   }
 
-const postApiCompany = <TData = AxiosResponse<void>>(
+  const postApiCompany = <TData = AxiosResponse<void>>(
     companyDto: CompanyDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/Company`,
-      companyDto,options
+      companyDto, options
     );
   }
 
-const getApiCompanyId = <TData = AxiosResponse<void>>(
+  const getApiCompanyId = <TData = AxiosResponse<void>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Company/${id}`,options
+      `http://localhost:5296/api/Company/${id}`, options
     );
   }
 
-const putApiCompanyId = <TData = AxiosResponse<void>>(
+  const putApiCompanyId = <TData = AxiosResponse<void>>(
     id: string,
     companyDto: CompanyDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/Company/${id}`,
-      companyDto,options
+      companyDto, options
     );
   }
 
-const deleteApiCompanyId = <TData = AxiosResponse<void>>(
+  const deleteApiCompanyId = <TData = AxiosResponse<void>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/Company/${id}`,options
+      `http://localhost:5296/api/Company/${id}`, options
     );
   }
 
-const get = <TData = AxiosResponse<void>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
+  const get = <TData = AxiosResponse<void>>(
+    options?: AxiosRequestConfig
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/`,options
+      `http://localhost:5296/`, options
     );
   }
 
-const postApiSlotAvailableSlots = <TData = AxiosResponse<void>>(
+  const postApiSlotAvailableSlots = <TData = AxiosResponse<void>>(
     slotRequestDto: SlotRequestDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/Slot/available-slots`,
-      slotRequestDto,options
+      slotRequestDto, options
     );
   }
 
-const getApiStaff = <TData = AxiosResponse<ObjectApiResponse>>(
+  const getApiStaff = <TData = AxiosResponse<StaffPaginationDtoApiResponse>>(
     params?: GetApiStaffParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Staff`,{
-        responseType: 'text',
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/Staff`, {
+      responseType: 'text',
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const postApiStaff = <TData = AxiosResponse<StaffApiResponse>>(
+  const postApiStaff = <TData = AxiosResponse<StaffApiResponse>>(
     staffDto: NonReadonly<StaffDto>, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/Staff`,
-      staffDto,options
+      staffDto, options
     );
   }
 
-const getApiStaffId = <TData = AxiosResponse<StaffApiResponse>>(
+  const getApiStaffId = <TData = AxiosResponse<StaffApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Staff/${id}`,options
+      `http://localhost:5296/api/Staff/${id}`, options
     );
   }
 
-const putApiStaffId = <TData = AxiosResponse<StaffApiResponse>>(
+  const putApiStaffId = <TData = AxiosResponse<StaffApiResponse>>(
     id: string,
     staffDto: NonReadonly<StaffDto>, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/Staff/${id}`,
-      staffDto,options
+      staffDto, options
     );
   }
 
-const deleteApiStaffId = <TData = AxiosResponse<BooleanApiResponse>>(
+  const deleteApiStaffId = <TData = AxiosResponse<BooleanApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/Staff/${id}`,options
+      `http://localhost:5296/api/Staff/${id}`, options
     );
   }
 
-const getApiStaffRoleRole = <TData = AxiosResponse<StaffListApiResponse>>(
+  const getApiStaffRoleRole = <TData = AxiosResponse<StaffListApiResponse>>(
     role: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Staff/role/${role}`,options
+      `http://localhost:5296/api/Staff/role/${role}`, options
     );
   }
 
-const getApiStaffSalonSalonName = <TData = AxiosResponse<StaffListApiResponse>>(
+  const getApiStaffSalonSalonName = <TData = AxiosResponse<StaffListApiResponse>>(
     salonName: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Staff/salon/${salonName}`,options
+      `http://localhost:5296/api/Staff/salon/${salonName}`, options
     );
   }
 
-const getApiStaffActive = <TData = AxiosResponse<StaffListApiResponse>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
+  const getApiStaffActive = <TData = AxiosResponse<StaffListApiResponse>>(
+    options?: AxiosRequestConfig
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Staff/active`,options
+      `http://localhost:5296/api/Staff/active`, options
     );
   }
 
-const getApiTime = <TData = AxiosResponse<void>>(
+  const getApiTime = <TData = AxiosResponse<void>>(
     params?: GetApiTimeParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Time`,{
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/Time`, {
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const postApiTime = <TData = AxiosResponse<void>>(
+  const postApiTime = <TData = AxiosResponse<void>>(
     timeDto: TimeDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/Time`,
-      timeDto,options
+      timeDto, options
     );
   }
 
-const getApiTimeDay = <TData = AxiosResponse<void>>(
+  const getApiTimeDay = <TData = AxiosResponse<void>>(
     day: string,
     params?: GetApiTimeDayParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/Time/${day}`,{
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/Time/${day}`, {
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const putApiTimeDay = <TData = AxiosResponse<void>>(
+  const putApiTimeDay = <TData = AxiosResponse<void>>(
     day: string,
     timeDto: TimeDto, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/Time/${day}`,
-      timeDto,options
+      timeDto, options
     );
   }
 
-const deleteApiTimeDay = <TData = AxiosResponse<void>>(
+  const deleteApiTimeDay = <TData = AxiosResponse<void>>(
     day: string,
     params?: DeleteApiTimeDayParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/Time/${day}`,{
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/Time/${day}`, {
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const postApiUserLogin = <TData = AxiosResponse<ObjectApiResponse>>(
+  const postApiUserLogin = <TData = AxiosResponse<LoginResponseApiResponse>>(
     loginRequest: LoginRequest, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/User/login`,
-      loginRequest,options
+      loginRequest, options
     );
   }
 
-const postApiUserLogout = <TData = AxiosResponse<void>>(
-     options?: AxiosRequestConfig
- ): Promise<TData> => {
+  const postApiUserLogout = <TData = AxiosResponse<void>>(
+    options?: AxiosRequestConfig
+  ): Promise<TData> => {
     return axios.default.post(
-      `http://localhost:5296/api/User/logout`,undefined,options
+      `http://localhost:5296/api/User/logout`, undefined, options
     );
   }
 
-const postApiUserRegisterCustomer = <TData = AxiosResponse<ObjectApiResponse>>(
+  const postApiUserRegisterCustomer = <TData = AxiosResponse<LoginResponseApiResponse>>(
     registerCustomerRequest: RegisterCustomerRequest, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/User/register/customer`,
-      registerCustomerRequest,options
+      registerCustomerRequest, options
     );
   }
 
-const postApiUserRegisterAdmin = <TData = AxiosResponse<ObjectApiResponse>>(
+  const postApiUserRegisterAdmin = <TData = AxiosResponse<LoginResponseApiResponse>>(
     registerAdminRequest: RegisterAdminRequest, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/User/register/admin`,
-      registerAdminRequest,options
+      registerAdminRequest, options
     );
   }
 
-const postApiUserRegisterEmployee = <TData = AxiosResponse<ObjectApiResponse>>(
+  const postApiUserRegisterEmployee = <TData = AxiosResponse<LoginResponseApiResponse>>(
     registerEmployeeRequest: NonReadonly<RegisterEmployeeRequest>, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/User/register/employee`,
-      registerEmployeeRequest,options
+      registerEmployeeRequest, options
     );
   }
 
-const postApiUserRegisterSuperadmin = <TData = AxiosResponse<ObjectApiResponse>>(
+  const postApiUserRegisterSuperadmin = <TData = AxiosResponse<LoginResponseApiResponse>>(
     registerSuperAdminRequest: RegisterSuperAdminRequest, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.post(
       `http://localhost:5296/api/User/register/superadmin`,
-      registerSuperAdminRequest,options
+      registerSuperAdminRequest, options
     );
   }
 
-const getApiUser = <TData = AxiosResponse<ObjectApiResponse>>(
+  const getApiUser = <TData = AxiosResponse<UserPaginationDtoApiResponse>>(
     params?: GetApiUserParams, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/User`,{
-        responseType: 'text',
-    ...options,
-        params: {...params, ...options?.params},}
+      `http://localhost:5296/api/User`, {
+      responseType: 'text',
+      ...options,
+      params: { ...params, ...options?.params },
+    }
     );
   }
 
-const getApiUserId = <TData = AxiosResponse<UserApiResponse>>(
+  const getApiUserId = <TData = AxiosResponse<UserApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.get(
-      `http://localhost:5296/api/User/${id}`,options
+      `http://localhost:5296/api/User/${id}`, options
     );
   }
 
-const putApiUserId = <TData = AxiosResponse<StringApiResponse>>(
+  const putApiUserId = <TData = AxiosResponse<StringApiResponse>>(
     id: string,
     updateUserRequest: UpdateUserRequest, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.put(
       `http://localhost:5296/api/User/${id}`,
-      updateUserRequest,options
+      updateUserRequest, options
     );
   }
 
-const deleteApiUserId = <TData = AxiosResponse<BooleanApiResponse>>(
+  const deleteApiUserId = <TData = AxiosResponse<BooleanApiResponse>>(
     id: string, options?: AxiosRequestConfig
- ): Promise<TData> => {
+  ): Promise<TData> => {
     return axios.default.delete(
-      `http://localhost:5296/api/User/${id}`,options
+      `http://localhost:5296/api/User/${id}`, options
     );
   }
 
-return {getApiAdminServices,postApiAdminServices,getApiAdminServicesId,putApiAdminServicesId,deleteApiAdminServicesId,getApiAdminServicesBySalonSalonName,getApiBooking,postApiBooking,getApiBookingId,putApiBookingId,deleteApiBookingId,getApiCompany,postApiCompany,getApiCompanyId,putApiCompanyId,deleteApiCompanyId,get,postApiSlotAvailableSlots,getApiStaff,postApiStaff,getApiStaffId,putApiStaffId,deleteApiStaffId,getApiStaffRoleRole,getApiStaffSalonSalonName,getApiStaffActive,getApiTime,postApiTime,getApiTimeDay,putApiTimeDay,deleteApiTimeDay,postApiUserLogin,postApiUserLogout,postApiUserRegisterCustomer,postApiUserRegisterAdmin,postApiUserRegisterEmployee,postApiUserRegisterSuperadmin,getApiUser,getApiUserId,putApiUserId,deleteApiUserId}};
+  return { getApiAdminServices, postApiAdminServices, getApiAdminServicesId, putApiAdminServicesId, deleteApiAdminServicesId, getApiAdminServicesBySalonSalonName, getApiBooking, postApiBooking, getApiBookingId, putApiBookingId, deleteApiBookingId, getApiCompany, postApiCompany, getApiCompanyId, putApiCompanyId, deleteApiCompanyId, get, postApiSlotAvailableSlots, getApiStaff, postApiStaff, getApiStaffId, putApiStaffId, deleteApiStaffId, getApiStaffRoleRole, getApiStaffSalonSalonName, getApiStaffActive, getApiTime, postApiTime, getApiTimeDay, putApiTimeDay, deleteApiTimeDay, postApiUserLogin, postApiUserLogout, postApiUserRegisterCustomer, postApiUserRegisterAdmin, postApiUserRegisterEmployee, postApiUserRegisterSuperadmin, getApiUser, getApiUserId, putApiUserId, deleteApiUserId }
+};
 export type GetApiAdminServicesResult = AxiosResponse<AdminServicesListApiResponse>
 export type PostApiAdminServicesResult = AxiosResponse<AdminServicesApiResponse>
 export type GetApiAdminServicesIdResult = AxiosResponse<AdminServicesApiResponse>
 export type PutApiAdminServicesIdResult = AxiosResponse<AdminServicesApiResponse>
 export type DeleteApiAdminServicesIdResult = AxiosResponse<BooleanApiResponse>
 export type GetApiAdminServicesBySalonSalonNameResult = AxiosResponse<AdminServicesListApiResponse>
-export type GetApiBookingResult = AxiosResponse<ObjectApiResponse>
+export type GetApiBookingResult = AxiosResponse<BookingPaginationDtoApiResponse>
 export type PostApiBookingResult = AxiosResponse<BookingApiResponse>
 export type GetApiBookingIdResult = AxiosResponse<BookingApiResponse>
 export type PutApiBookingIdResult = AxiosResponse<StringApiResponse>
@@ -782,7 +857,7 @@ export type PutApiCompanyIdResult = AxiosResponse<void>
 export type DeleteApiCompanyIdResult = AxiosResponse<void>
 export type GetResult = AxiosResponse<void>
 export type PostApiSlotAvailableSlotsResult = AxiosResponse<void>
-export type GetApiStaffResult = AxiosResponse<ObjectApiResponse>
+export type GetApiStaffResult = AxiosResponse<StaffPaginationDtoApiResponse>
 export type PostApiStaffResult = AxiosResponse<StaffApiResponse>
 export type GetApiStaffIdResult = AxiosResponse<StaffApiResponse>
 export type PutApiStaffIdResult = AxiosResponse<StaffApiResponse>
@@ -795,13 +870,13 @@ export type PostApiTimeResult = AxiosResponse<void>
 export type GetApiTimeDayResult = AxiosResponse<void>
 export type PutApiTimeDayResult = AxiosResponse<void>
 export type DeleteApiTimeDayResult = AxiosResponse<void>
-export type PostApiUserLoginResult = AxiosResponse<ObjectApiResponse>
+export type PostApiUserLoginResult = AxiosResponse<LoginResponseApiResponse>
 export type PostApiUserLogoutResult = AxiosResponse<void>
-export type PostApiUserRegisterCustomerResult = AxiosResponse<ObjectApiResponse>
-export type PostApiUserRegisterAdminResult = AxiosResponse<ObjectApiResponse>
-export type PostApiUserRegisterEmployeeResult = AxiosResponse<ObjectApiResponse>
-export type PostApiUserRegisterSuperadminResult = AxiosResponse<ObjectApiResponse>
-export type GetApiUserResult = AxiosResponse<ObjectApiResponse>
+export type PostApiUserRegisterCustomerResult = AxiosResponse<LoginResponseApiResponse>
+export type PostApiUserRegisterAdminResult = AxiosResponse<LoginResponseApiResponse>
+export type PostApiUserRegisterEmployeeResult = AxiosResponse<LoginResponseApiResponse>
+export type PostApiUserRegisterSuperadminResult = AxiosResponse<LoginResponseApiResponse>
+export type GetApiUserResult = AxiosResponse<UserPaginationDtoApiResponse>
 export type GetApiUserIdResult = AxiosResponse<UserApiResponse>
 export type PutApiUserIdResult = AxiosResponse<StringApiResponse>
 export type DeleteApiUserIdResult = AxiosResponse<BooleanApiResponse>

@@ -15,51 +15,41 @@ namespace SalonBackend.Controllers
         public StaffController(StaffService staffService)
         {
             _staffService = staffService;
-        } 
+        }
 
         [HttpGet]
-        public async Task<ActionResult<ApiResponse<object>>> GetAllStaff(
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 4)
+        public async Task<ActionResult<ApiResponse<PaginationDto<Staff>>>> GetAllStaff(
+         int page = 1,
+         int pageSize = 4)
         {
             try
             {
-                if (page == 0 || pageSize == 0)
-                {
-                    var allStaff = await _staffService.GetAllAsync();
-                    return Ok(new ApiResponse<List<Staff>>
-                    {
-                        Status = true,
-                        Message = "Staff retrieved successfully",
-                        Result = allStaff
-                    });
-                }
+                var (data, totalCount) =
+                    await _staffService.GetPagedAsync(page, pageSize);
 
-                var (data, totalCount) = await _staffService.GetPagedAsync(page, pageSize);
-                var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                var totalPages =
+                    (int)Math.Ceiling(totalCount / (double)pageSize);
 
-                return Ok(new ApiResponse<object>
+                return Ok(new ApiResponse<PaginationDto<Staff>>
                 {
                     Status = true,
                     Message = "Staff retrieved successfully",
-                    Result = new
+
+                    Result = new PaginationDto<Staff>
                     {
                         Data = data,
-                        Pagination = new
-                        {
-                            CurrentPage = page,
-                            PageSize = pageSize,
-                            TotalCount = totalCount,
-                            TotalPages = totalPages,
-                            HasNextPage = page < totalPages,
-                            HasPreviousPage = page > 1
-                        }
+                        CurrentPage = page,
+                        PageSize = pageSize,
+                        TotalCount = totalCount,
+                        TotalPages = totalPages,
+                        HasNextPage = page < totalPages,
+                        HasPreviousPage = page > 1
                     }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<PaginationDto<Staff>>
                 {
                     Status = false,
                     Message = ex.Message,
@@ -74,7 +64,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var staff = await _staffService.GetByIdAsync(id);
-                
+
                 if (staff == null)
                 {
                     return NotFound(new ApiResponse<Staff>
@@ -98,7 +88,7 @@ namespace SalonBackend.Controllers
                 {
                     Message = ex.Message,
                     Status = false,
-                    Result = null 
+                    Result = null
                 });
             }
         }
@@ -109,7 +99,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var staffList = await _staffService.GetByRoleAsync(role);
-                
+
                 return Ok(new ApiResponse<List<Staff>>
                 {
                     Message = $"Staff with role '{role}' retrieved successfully",
@@ -134,7 +124,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var staffList = await _staffService.GetBySalonNameAsync(salonName);
-                
+
                 return Ok(new ApiResponse<List<Staff>>
                 {
                     Message = $"Staff for salon '{salonName}' retrieved successfully",
@@ -159,7 +149,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var staffList = await _staffService.GetActiveStaffAsync();
-                
+
                 return Ok(new ApiResponse<List<Staff>>
                 {
                     Message = "Active staff retrieved successfully",
@@ -184,7 +174,7 @@ namespace SalonBackend.Controllers
             try
             {
                 if (dto == null)
-                {   
+                {
                     return BadRequest(new ApiResponse<Staff>
                     {
                         Message = "Invalid staff data",
@@ -240,7 +230,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var existing = await _staffService.GetByIdAsync(id);
-                
+
                 if (existing == null)
                 {
                     return NotFound(new ApiResponse<Staff>
@@ -259,7 +249,7 @@ namespace SalonBackend.Controllers
                 existing.SalonName = dto.SalonName;
 
                 var success = await _staffService.UpdateAsync(id, existing);
-                
+
                 if (!success)
                 {
                     return StatusCode(500, new ApiResponse<Staff>
@@ -294,7 +284,7 @@ namespace SalonBackend.Controllers
             try
             {
                 var existing = await _staffService.GetByIdAsync(id);
-                
+
                 if (existing == null)
                 {
                     return NotFound(new ApiResponse<bool>
@@ -306,7 +296,7 @@ namespace SalonBackend.Controllers
                 }
 
                 var success = await _staffService.DeleteAsync(id);
-                
+
                 if (!success)
                 {
                     return StatusCode(500, new ApiResponse<bool>

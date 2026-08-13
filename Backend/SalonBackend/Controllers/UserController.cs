@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SalonBackend.Models;
-using SalonBackend.Services;
 using SalonBackend.Models.Dtos;
+using SalonBackend.Services;
+using System.Security.Claims;
 
 namespace SalonBackend.Controllers
 {
@@ -12,7 +13,6 @@ namespace SalonBackend.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
-
         public UserController(UserService userService)
         {
             _userService = userService;
@@ -20,13 +20,13 @@ namespace SalonBackend.Controllers
 
         [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<ActionResult<ApiResponse<object>>> Login([FromBody] LoginRequest request)
+        public async Task<ActionResult<ApiResponse<LoginResponse>>> Login([FromBody] LoginRequest request)
         {
             try
             {
                 if (request == null || string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
                 {
-                    return BadRequest(new ApiResponse<object>
+                    return BadRequest(new ApiResponse<LoginResponse>
                     {
                         Status = false,
                         Message = "Email and password are required",
@@ -47,19 +47,15 @@ namespace SalonBackend.Controllers
                         Path = "/"
                     });
 
-                    return Ok(new ApiResponse<object>
+                    return Ok(new ApiResponse<LoginResponse>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = new
-                        {
-                            User = result.User,
-                            Token = result.Token
-                        }
+                        Result = result.User
                     });
                 }
 
-                return BadRequest(new ApiResponse<object>
+                return BadRequest(new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = result.Message,
@@ -68,7 +64,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -77,12 +73,10 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("logout")]
         public IActionResult Logout()
         {
             Response.Cookies.Delete("jwt_token");
-
             return Ok(new ApiResponse<object>
             {
                 Status = true,
@@ -93,13 +87,13 @@ namespace SalonBackend.Controllers
 
         [AllowAnonymous]
         [HttpPost("register/customer")]
-        public async Task<ActionResult<ApiResponse<object>>> RegisterCustomer([FromBody] RegisterCustomerRequest dto)
+        public async Task<ActionResult<ApiResponse<LoginResponse>>> RegisterCustomer([FromBody] RegisterCustomerRequest dto)
         {
             try
             {
                 if (dto == null)
                 {
-                    return BadRequest(new ApiResponse<object>
+                    return BadRequest(new ApiResponse<LoginResponse>
                     {
                         Status = false,
                         Message = "Invalid registration data",
@@ -111,19 +105,15 @@ namespace SalonBackend.Controllers
 
                 if (result.Success)
                 {
-                    return Ok(new ApiResponse<object>
+                    return Ok(new ApiResponse<LoginResponse>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = new
-                        {
-                            User = result.User,
-                            Token = result.Token
-                        }
+                        Result = result.User
                     });
                 }
 
-                return BadRequest(new ApiResponse<object>
+                return BadRequest(new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = result.Message,
@@ -132,7 +122,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -143,13 +133,13 @@ namespace SalonBackend.Controllers
 
         [AllowAnonymous]
         [HttpPost("register/admin")]
-        public async Task<ActionResult<ApiResponse<object>>> RegisterAdmin([FromBody] RegisterAdminRequest dto)
+        public async Task<ActionResult<ApiResponse<LoginResponse>>> RegisterAdmin([FromBody] RegisterAdminRequest dto)
         {
             try
             {
                 if (dto == null)
                 {
-                    return BadRequest(new ApiResponse<object>
+                    return BadRequest(new ApiResponse<LoginResponse>
                     {
                         Status = false,
                         Message = "Invalid registration data",
@@ -161,19 +151,15 @@ namespace SalonBackend.Controllers
 
                 if (result.Success)
                 {
-                    return Ok(new ApiResponse<object>
+                    return Ok(new ApiResponse<LoginResponse>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = new
-                        {
-                            User = result.User,
-                            Token = result.Token
-                        }
+                        Result = result.User
                     });
                 }
 
-                return BadRequest(new ApiResponse<object>
+                return BadRequest(new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = result.Message,
@@ -182,7 +168,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -193,13 +179,13 @@ namespace SalonBackend.Controllers
 
         [Authorize(Roles = "Admin,SuperAdmin")]
         [HttpPost("register/employee")]
-        public async Task<ActionResult<ApiResponse<object>>> RegisterEmployee([FromBody] RegisterEmployeeRequest dto)
+        public async Task<ActionResult<ApiResponse<LoginResponse>>> RegisterEmployee([FromBody] RegisterEmployeeRequest dto)
         {
             try
             {
                 if (dto == null)
                 {
-                    return BadRequest(new ApiResponse<object>
+                    return BadRequest(new ApiResponse<LoginResponse>
                     {
                         Status = false,
                         Message = "Invalid registration data",
@@ -211,19 +197,15 @@ namespace SalonBackend.Controllers
 
                 if (result.Success)
                 {
-                    return Ok(new ApiResponse<object>
+                    return Ok(new ApiResponse<LoginResponse>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = new
-                        {
-                            User = result.User,
-                            Token = result.Token
-                        }
+                        Result = result.User
                     });
                 }
 
-                return BadRequest(new ApiResponse<object>
+                return BadRequest(new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = result.Message,
@@ -232,7 +214,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -241,15 +223,14 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [AllowAnonymous]
         [HttpPost("register/superadmin")]
-        public async Task<ActionResult<ApiResponse<object>>> RegisterSuperAdmin([FromBody] RegisterSuperAdminRequest dto)
+        public async Task<ActionResult<ApiResponse<LoginResponse>>> RegisterSuperAdmin([FromBody] RegisterSuperAdminRequest dto)
         {
             try
             {
                 if (dto == null)
                 {
-                    return BadRequest(new ApiResponse<object>
+                    return BadRequest(new ApiResponse<LoginResponse>
                     {
                         Status = false,
                         Message = "Invalid registration data",
@@ -261,19 +242,15 @@ namespace SalonBackend.Controllers
 
                 if (result.Success)
                 {
-                    return Ok(new ApiResponse<object>
+                    return Ok(new ApiResponse<LoginResponse>
                     {
                         Status = true,
                         Message = result.Message,
-                        Result = new
-                        {
-                            User = result.User,
-                            Token = result.Token
-                        }
+                        Result = result.User
                     });
                 }
 
-                return BadRequest(new ApiResponse<object>
+                return BadRequest(new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = result.Message,
@@ -282,7 +259,7 @@ namespace SalonBackend.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<LoginResponse>
                 {
                     Status = false,
                     Message = $"Error: {ex.Message}",
@@ -291,50 +268,104 @@ namespace SalonBackend.Controllers
             }
         }
 
-        [Authorize]
-        [HttpGet]
-        public async Task<ActionResult<ApiResponse<object>>> GetAllUsers(
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 4)
+        [Authorize(Roles = "SuperAdmin")]
+        [HttpPut("approve-admin/{id}")]
+        public async Task<ActionResult<ApiResponse<bool>>> ApproveAdmin(string id)
         {
             try
             {
-                if (page == 0 || pageSize == 0)
+                var success = await _userService.ApproveAdminAsync(id);
+                if (success)
                 {
-                    var allUsers = await _userService.GetAllUsersAsync();
-                    return Ok(new ApiResponse<List<User>>
+                    return Ok(new ApiResponse<bool>
                     {
                         Status = true,
-                        Message = "Users retrieved successfully",
-                        Result = allUsers
+                        Message = "Admin approved successfully",
+                        Result = true
                     });
                 }
+                return BadRequest(new ApiResponse<bool>
+                {
+                    Status = false,
+                    Message = "Admin not found or already approved",
+                    Result = false
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Status = false,
+                    Message = $"Error: {ex.Message}",
+                    Result = false
+                });
+            }
+        }
 
+        [Authorize(Roles = "SuperAdmin")]
+        [HttpPut("reject-admin/{id}")]
+        public async Task<ActionResult<ApiResponse<bool>>> RejectAdmin(string id)
+        {
+            try
+            {
+                var success = await _userService.RejectAdminAsync(id);
+                if (success)
+                {
+                    return Ok(new ApiResponse<bool>
+                    {
+                        Status = true,
+                        Message = "Admin rejected successfully",
+                        Result = true
+                    });
+                }
+                return BadRequest(new ApiResponse<bool>
+                {
+                    Status = false,
+                    Message = "Admin not found or already rejected",
+                    Result = false
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new ApiResponse<bool>
+                {
+                    Status = false,
+                    Message = $"Error: {ex.Message}",
+                    Result = false
+                });
+            }
+        }
+
+        [Authorize]
+        [HttpGet]
+        public async Task<ActionResult<ApiResponse<PaginationDto<User>>>> GetAllUsers(
+          int page = 1,
+          int pageSize = 4)
+        {
+            try
+            {
                 var (data, totalCount) = await _userService.GetPagedUsersAsync(page, pageSize);
                 var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-                return Ok(new ApiResponse<object>
+                return Ok(new ApiResponse<PaginationDto<User>>
                 {
                     Status = true,
                     Message = "Users retrieved successfully",
-                    Result = new
+                    Result = new PaginationDto<User>
                     {
                         Data = data,
-                        Pagination = new
-                        {
-                            CurrentPage = page,
-                            PageSize = pageSize,
-                            TotalCount = totalCount,
-                            TotalPages = totalPages,
-                            HasNextPage = page < totalPages,
-                            HasPreviousPage = page > 1
-                        }
+                        CurrentPage = page,
+                        PageSize = pageSize,
+                        TotalCount = totalCount,
+                        TotalPages = totalPages,
+                        HasNextPage = page < totalPages,
+                        HasPreviousPage = page > 1
                     }
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new ApiResponse<object>
+                return StatusCode(500, new ApiResponse<PaginationDto<User>>
                 {
                     Status = false,
                     Message = ex.Message,
@@ -350,7 +381,6 @@ namespace SalonBackend.Controllers
             try
             {
                 var user = await _userService.GetUserByIdAsync(id);
-
                 if (user == null)
                 {
                     return NotFound(new ApiResponse<User>

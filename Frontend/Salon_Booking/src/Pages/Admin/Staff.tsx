@@ -10,7 +10,9 @@ import dayjs from "dayjs";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
 
-const { getApiStaff, postApiStaff, putApiStaffId, deleteApiStaffId, postApiUserRegisterEmployee } = getSalonBookingAPI();const { Option } = Select;
+const { getApiStaff, postApiStaff, putApiStaffId, deleteApiStaffId, postApiUserRegisterEmployee } = getSalonBookingAPI();
+const { Option } = Select;
+
 const Staff = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
@@ -69,67 +71,85 @@ const Staff = () => {
     }
   };
 
-  const resetModal = () => {setModalVisible(false);setEditingStaff(null);form.resetFields();
+  const resetModal = () => {
+    setModalVisible(false);
+    setEditingStaff(null);
+    form.resetFields();
     setSubmitted(false);
     setFieldErrors({ name: '', email: '', password: '' });
   };
 
-  const { data: infiniteData, fetchNextPage, hasNextPage,isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
+  // ✅ FIXED infinite query with correct pagination fields
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
     queryKey: ['staff', statusFilter],
     initialPageParam: 1,
     queryFn: async ({ pageParam = 1 }) => {
-      const response = await getApiStaff(
-        { 
-          page: pageParam, 
-          pageSize: 4
-        }, 
-        axiosConfig
-      );
-      
-      const parsedData = ResponseData(response);
-      if (!parsedData?.status === true || !parsedData?.result?.data) {
+      try {
+        const response = await getApiStaff(
+          { page: pageParam, pageSize: 4 },
+          axiosConfig
+        );
+
+        const parsedData = ResponseData(response);
+        if (!parsedData || parsedData.status !== true || !parsedData.result?.data) {
+          return {
+            data: [],
+            totalCount: 0,
+            hasNextPage: false,
+            nextPage: pageParam + 1,
+          };
+        }
+
+        let rawStaff = parsedData.result.data;
+        // ✅ Directly read from result (not result.pagination)
+        const totalCount = parsedData.result.totalCount || 0;
+        const hasNext = parsedData.result.hasNextPage || false;
+
+        if (isCustomer) {
+          rawStaff = [];
+        } else if (isAdmin && !isSuperAdmin && userSalonName) {
+          rawStaff = rawStaff.filter((s: any) =>
+            (s.salonName || s.SalonName) === userSalonName
+          );
+        }
+
+        const transformedStaff = rawStaff.map((s: any, index: number) => ({
+          key: s.id || s._id || `${pageParam}-${index}`,
+          id: s.id || s._id,
+          name: s.name || s.Name || s.fullName || s.FullName || 'Unknown',
+          email: s.email || s.Email || 'No Email',
+          role: s.role || s.Role || 'Employee',
+          status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive',
+          joined: s.joinedDate || s.JoinedDate || s.createdAt || s.CreatedAt || new Date().toISOString(),
+          salonName: s.salonName || s.SalonName || 'Unknown'
+        }));
+
+        return {
+          data: transformedStaff,
+          totalCount: totalCount,     // ✅ from result.totalCount
+          hasNextPage: hasNext,       // ✅ from result.hasNextPage
+          nextPage: pageParam + 1,
+        };
+      } catch (error) {
+        console.error('Error fetching staff:', error);
         return {
           data: [],
           totalCount: 0,
           hasNextPage: false,
-          nextPage: pageParam + 1
+          nextPage: pageParam + 1,
         };
       }
-
-      let rawStaff = parsedData.result.data;
-      const pagination = parsedData.result.pagination;
-
-      if (isCustomer) {
-        rawStaff = [];
-      } else if (isAdmin && !isSuperAdmin && userSalonName) {
-        rawStaff = rawStaff.filter((s: any) =>
-          (s.salonName || s.SalonName) === userSalonName
-        );
-      }
-
-      const transformedStaff = rawStaff.map((s: any, index: number) => ({
-        key: s.id || s._id || `${pageParam}-${index}`,
-        id: s.id || s._id,
-        name: s.name || s.Name || s.fullName || s.FullName || 'Unknown',
-        email: s.email || s.Email || 'No Email',
-        role: s.role || s.Role || 'Employee',
-        status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive',
-        joined: s.joinedDate || s.JoinedDate || s.createdAt || s.CreatedAt || new Date().toISOString(),
-        salonName: s.salonName || s.SalonName || 'Unknown'
-      }));
-
-      return {
-        data: transformedStaff,
-        totalCount: pagination?.totalCount || 0,
-        hasNextPage: pagination?.hasNextPage || false,
-        nextPage: pageParam + 1,
-      };
     },
     getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
   });
 
+  // Intersection Observer for infinite scroll
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
+
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+    }
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
@@ -147,6 +167,7 @@ const Staff = () => {
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect();
+        observerRef.current = null;
       }
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -170,6 +191,7 @@ const Staff = () => {
   }, [searchFilteredData, statusFilter]);
 
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
+
   const addStaffMutation = useMutation({
     mutationFn: async (payload: any) => {
       const staffResponse = await postApiStaff(payload, axiosConfig);
@@ -299,8 +321,8 @@ const Staff = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold"  style={{ fontFamily: 'PT Serif, serif' }}>{isCustomer ? "Our Staff" : "Staff Management"}</h1>
-          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }} >{isCustomer ? "Meet our professional staff" : "Manage salon staff"}</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>{isCustomer ? "Our Staff" : "Staff Management"}</h1>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>{isCustomer ? "Meet our professional staff" : "Manage salon staff"}</p>
         </div>
         {!isCustomer && (
           <Button
@@ -378,9 +400,9 @@ const Staff = () => {
             </div>
           )}
 
-          {!hasNextPage && filteredStaff.length > 0 && filteredStaff.length === totalCount && (
+          {!hasNextPage && filteredStaff.length > 0 && (
             <div className="text-center py-4 text-green-600">
-              ✅ All {totalCount} staff members loaded successfully!
+              ✅ All {filteredStaff.length} staff members loaded (out of {totalCount} total)
             </div>
           )}
 

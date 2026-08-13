@@ -26,17 +26,25 @@ namespace SalonBackend.Services
             public bool Success { get; set; }
             public string Message { get; set; } = string.Empty;
             public string? Token { get; set; }
-            public object? User { get; set; }
+            public LoginResponse? User { get; set; }
         }
 
         public async Task<AuthResult> LoginAsync(string email, string password)
         {
             var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
-            if (user == null) 
+            if (user == null)
                 return new AuthResult { Success = false, Message = "Invalid email or password" };
 
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
                 return new AuthResult { Success = false, Message = "Invalid email or password" };
+
+            if (user.Role == UserRole.Admin && user.ApprovalStatus != ApprovalStatus.Approved)
+            {
+                var msg = user.ApprovalStatus == ApprovalStatus.Rejected
+                    ? "Your salon registration has been rejected."
+                    : "Your salon registration is waiting for Super Admin approval.";
+                return new AuthResult { Success = false, Message = msg };
+            }
 
             if (!user.IsActive)
                 return new AuthResult { Success = false, Message = "Account is deactivated" };
@@ -45,31 +53,48 @@ namespace SalonBackend.Services
 
             return new AuthResult
             {
-                Success = true, 
+                Success = true,
                 Message = "Login successful",
                 Token = token,
-                User = new
+                User = new LoginResponse
                 {
-                    Id = user.Id,
+                    Token = token,
+                    UserId = user.Id,
                     FullName = user.FullName,
                     Email = user.Email,
-                    PhoneNumber = user.PhoneNumber,
-                    SalonName = user.SalonName,
-                    SalonAddress = user.SalonAddress,
-                    Role = user.Role,
-                    IsActive = user.IsActive
+                    Role = user.Role.ToString(),
+                    CompanyId = user.SalonName ?? string.Empty,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7)
                 }
             };
         }
 
         public async Task<AuthResult> RegisterCustomerAsync(RegisterCustomerRequest request)
         {
-            return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, "", "", request.Password, UserRole.Customer);
+            return await RegisterUser(
+                request.FullName,
+                request.Email,
+                request.PhoneNumber,
+                "",
+                "",
+                request.Password,
+                UserRole.Customer,
+                ApprovalStatus.Approved
+            );
         }
 
         public async Task<AuthResult> RegisterAdminAsync(RegisterAdminRequest request)
         {
-            return await RegisterUser(request.FullName, request.Email, request.PhoneNumber, request.SalonName, request.SalonAddress, request.Password, UserRole.Admin);
+            return await RegisterUser(
+                request.FullName,
+                request.Email,
+                request.PhoneNumber,
+                request.SalonName,
+                request.SalonAddress,
+                request.Password,
+                UserRole.Admin,
+                ApprovalStatus.Pending   
+            );
         }
 
         public async Task<AuthResult> RegisterSuperAdminAsync(RegisterSuperAdminRequest request)
@@ -89,12 +114,13 @@ namespace SalonBackend.Services
 
             return await RegisterUser(
                 "SuperAdmin",
-                fixedEmail,   
+                fixedEmail,
                 "",
                 "",
                 "",
                 fixedPassword,
-                UserRole.SuperAdmin
+                UserRole.SuperAdmin,
+                ApprovalStatus.Approved
             );
         }
 
@@ -116,7 +142,8 @@ namespace SalonBackend.Services
                 Role = UserRole.Employee,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-                EmployeeProfileId = staff.Id
+                EmployeeProfileId = staff.Id,
+                ApprovalStatus = ApprovalStatus.Approved
             };
 
             await _users.InsertOneAsync(user);
@@ -127,17 +154,28 @@ namespace SalonBackend.Services
                 Success = true,
                 Message = "Employee registered successfully",
                 Token = token,
-                User = new
+                User = new LoginResponse
                 {
-                    Id = user.Id,
+                    Token = token,
+                    UserId = user.Id,
                     FullName = user.FullName,
                     Email = user.Email,
-                    Role = user.Role
+                    Role = user.Role.ToString(),
+                    CompanyId = string.Empty,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7)
                 }
             };
         }
 
-        private async Task<AuthResult> RegisterUser(string fullName, string email, string phoneNumber, string salonName, string salonAddress, string password, UserRole role)
+        private async Task<AuthResult> RegisterUser(
+            string fullName,
+            string email,
+            string phoneNumber,
+            string salonName,
+            string salonAddress,
+            string password,
+            UserRole role,
+            ApprovalStatus approvalStatus = ApprovalStatus.Approved)
         {
             var exists = await _users.Find(u => u.Email == email).AnyAsync();
             if (exists)
@@ -153,7 +191,8 @@ namespace SalonBackend.Services
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
                 Role = role,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ApprovalStatus = approvalStatus  
             };
 
             await _users.InsertOneAsync(user);
@@ -164,18 +203,43 @@ namespace SalonBackend.Services
                 Success = true,
                 Message = $"{role} registered successfully",
                 Token = token,
-                User = new
+                User = new LoginResponse
                 {
-                    Id = user.Id,
+                    Token = token,
+                    UserId = user.Id,
                     FullName = user.FullName,
                     Email = user.Email,
-                    PhoneNumber = user.PhoneNumber,
-                    SalonName = user.SalonName,
-                    SalonAddress = user.SalonAddress,
-                    Role = user.Role,
-                    IsActive = user.IsActive
+                    Role = user.Role.ToString(),
+                    CompanyId = user.SalonName ?? string.Empty,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7)
                 }
             };
+        }
+
+        public async Task<bool> ApproveAdminAsync(string id)
+        {
+            var update = Builders<User>.Update
+                .Set(x => x.ApprovalStatus, ApprovalStatus.Approved)
+                .Set(x => x.UpdatedAt, DateTime.UtcNow);
+
+            var result = await _users.UpdateOneAsync(
+                x => x.Id == id && x.Role == UserRole.Admin,
+                update
+            );
+            return result.ModifiedCount > 0;
+        }
+
+        public async Task<bool> RejectAdminAsync(string id)
+        {
+            var update = Builders<User>.Update
+                .Set(x => x.ApprovalStatus, ApprovalStatus.Rejected)
+                .Set(x => x.UpdatedAt, DateTime.UtcNow);
+
+            var result = await _users.UpdateOneAsync(
+                x => x.Id == id && x.Role == UserRole.Admin,
+                update
+            );
+            return result.ModifiedCount > 0;
         }
 
         public async Task<List<User>> GetAllUsersAsync()
@@ -186,14 +250,12 @@ namespace SalonBackend.Services
         public async Task<(List<User> Data, long TotalCount)> GetPagedUsersAsync(int page, int pageSize)
         {
             var totalCount = await _users.CountDocumentsAsync(_ => true);
-            
             var data = await _users
                 .Find(_ => true)
                 .SortByDescending(u => u.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Limit(pageSize)
                 .ToListAsync();
-            
             return (data, totalCount);
         }
 
@@ -220,7 +282,6 @@ namespace SalonBackend.Services
                 .Set(u => u.UpdatedAt, DateTime.UtcNow);
 
             var result = await _users.UpdateOneAsync(u => u.Id == id, update);
-
             return result.ModifiedCount == 0
                 ? (false, "User not updated")
                 : (true, "User updated successfully");
@@ -229,7 +290,6 @@ namespace SalonBackend.Services
         public async Task<(bool Success, string Message)> DeleteUserAsync(string id)
         {
             var result = await _users.DeleteOneAsync(u => u.Id == id);
-
             return result.DeletedCount == 0
                 ? (false, "User not found")
                 : (true, "User deleted successfully");

@@ -46,7 +46,6 @@ namespace SalonBackend.Controllers
             try
             {
                 var service = await _adminService.GetByIdAsync(id);
-
                 if (service == null)
                 {
                     return NotFound(new ApiResponse<AdminServices>

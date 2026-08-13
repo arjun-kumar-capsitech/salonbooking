@@ -179,6 +179,7 @@ const Bookings = () => {
     },
   });
 
+  // ✅ FIXED: Infinite query with correct pagination fields
   const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
     queryKey: ['bookings', statusFilter, userSalonName],
     initialPageParam: 1,
@@ -186,7 +187,8 @@ const Bookings = () => {
       try {
         const response = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
         const parsedData = ResponseData(response);
-        if (!parsedData?.status === true || !parsedData?.result?.data) {
+        // Check if we have valid data
+        if (!parsedData || parsedData.status !== true || !parsedData.result?.data) {
           return {
             data: [],
             totalCount: 0,
@@ -195,7 +197,9 @@ const Bookings = () => {
           };
         }
         let rawBookings = parsedData.result.data;
-        const pagination = parsedData.result.pagination;
+        // ✅ Directly read pagination from result, not from result.pagination
+        const totalCount = parsedData.result.totalCount || 0;
+        const hasNext = parsedData.result.hasNextPage || false;
 
         rawBookings.sort((a: any, b: any) => {
           const dateA = dayjs(a.appointmentDate || a.AppointmentDate);
@@ -307,8 +311,8 @@ const Bookings = () => {
 
         return {
           data: transformedBookings,
-          totalCount: pagination?.totalCount || transformedBookings.length,
-          hasNextPage: pagination?.hasNextPage || false,
+          totalCount: totalCount,          // ✅ from result.totalCount
+          hasNextPage: hasNext,            // ✅ from result.hasNextPage
           nextPage: pageParam + 1,
         };
       } catch (error) {
@@ -325,6 +329,7 @@ const Bookings = () => {
     enabled: !!referenceData,
   });
 
+  // Intersection Observer for infinite scroll
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
     if (observerRef.current) {
@@ -365,6 +370,7 @@ const Bookings = () => {
 
   const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
 
+  // Rest of the code remains the same...
   const { data: existingBookings = [], isLoading: bookingsLoading } = useQuery({
     queryKey: ['staffBookings', selectedStaffId, selectedDate],
     enabled: !!selectedStaffId && !!selectedDate && !!token,
@@ -671,6 +677,11 @@ const Bookings = () => {
             <div className="text-center py-4">
               <Spin size="large" />
               <p className="mt-2 text-gray-500">Loading more bookings...</p>
+            </div>
+          )}
+          {!hasNextPage && filteredBookings.length > 0 && (
+            <div className="text-center py-4 text-green-600">
+              ✅ All {filteredBookings.length} bookings loaded (out of {totalCount} total)
             </div>
           )}
           {!hasNextPage && filteredBookings.length === 0 && !isLoading && (

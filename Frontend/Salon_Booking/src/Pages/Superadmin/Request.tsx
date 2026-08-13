@@ -7,19 +7,33 @@ import { showSuperAdminRequest } from "../../Redux/Store/Slice/columnsSlice";
 import { DataTable } from "../../Components/Ui/Table";
 import { getSalonBookingAPI } from '../../api/generated';
 import { useSearch } from '../../utils/FilterData';
+import axios from 'axios';
 
 const { getApiUser } = getSalonBookingAPI();
+const API_BASE = "http://localhost:5296";
 
 const StatusBadge = ({ status }: { status: string }) => {
   const getStatusColor = () => {
-    switch (status) {
+    switch (status?.toLowerCase()) {
       case "approved": return { bg: "#f6ffed", color: "#52c41a", text: "Approved" };
       case "rejected": return { bg: "#fff2f0", color: "#ff4d4f", text: "Rejected" };
       default: return { bg: "#fff7e6", color: "#faad14", text: "Pending" };
     }
   };
   const { bg, color, text } = getStatusColor();
-  return <span style={{ backgroundColor: bg, color: color, padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 500, display: "inline-block" }}>{text}</span>;
+  return (
+    <span style={{ 
+      backgroundColor: bg, 
+      color: color, 
+      padding: "4px 12px", 
+      borderRadius: "20px", 
+      fontSize: "12px", 
+      fontWeight: 500, 
+      display: "inline-block" 
+    }}>
+      {text}
+    </span>
+  );
 };
 
 const Request = () => {
@@ -42,7 +56,6 @@ const Request = () => {
     return response.data;
   };
 
-  // ✅ Fixed: dispatch in useEffect - No Infinite Loop
   useEffect(() => {
     dispatch(showSuperAdminRequest());
   }, [dispatch]);
@@ -59,26 +72,40 @@ const Request = () => {
 
       let rawUsers = [];
       const result = parsedData.result;
-      
       if (Array.isArray(result)) {
         rawUsers = result;
       } else if (result?.data && Array.isArray(result.data)) {
         rawUsers = result.data;
       } else {
-        rawUsers = [];
+        return [];
       }
-      
-      const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
+
       return rawUsers
-        .filter((u: any) => u.role === 2 || u.Role === 2)
-        .map((u: any) => ({
-          id: u.id || u._id,
-          companyName: u.salonName || u.SalonName || u.fullName || u.FullName || 'N/A',
-          owner: u.fullName || u.FullName || u.name || 'N/A',
-          email: u.email || u.Email || 'N/A',
-          requestDate: u.createdAt || u.CreatedAt || new Date().toISOString(),
-          status: savedStatus[u.id || u._id] || "pending",
-        }));
+        .filter((u: any) => {
+          const role = u.role ?? u.Role;
+          return role === 2 || role === "Admin" || role === "admin";
+        })
+        .map((u: any) => {
+          let status = 'pending';
+          const rawStatus = u.approvalStatus ?? u.ApprovalStatus;
+          if (typeof rawStatus === 'string') {
+            status = rawStatus.toLowerCase();
+          } else if (typeof rawStatus === 'number') {
+            switch (rawStatus) {
+              case 1: status = 'approved'; break;
+              case 2: status = 'rejected'; break;
+              default: status = 'pending'; break;
+            }
+          }
+          return {
+            id: u.id || u._id,
+            companyName: u.salonName || u.SalonName || u.fullName || u.FullName || 'N/A',
+            owner: u.fullName || u.FullName || u.name || 'N/A',
+            email: u.email || u.Email || 'N/A',
+            requestDate: u.createdAt || u.CreatedAt || new Date().toISOString(),
+            status: status,
+          };
+        });
     }
   });
 
@@ -94,19 +121,22 @@ const Request = () => {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
-      savedStatus[id] = status;
-      localStorage.setItem("salonStatus", JSON.stringify(savedStatus));
-      return { id, status };
+      const endpoint = status === "approved" 
+        ? `${API_BASE}/api/User/approve-admin/${id}`
+        : `${API_BASE}/api/User/reject-admin/${id}`;
+      const response = await axios.put(endpoint, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
     },
-    onSuccess: ({ status }) => {
-      message.success(`Request ${status === "approved" ? "Approved" : "Rejected"} Successfully`);
+    onSuccess: () => {
+      message.success("Request updated successfully");
       queryClient.invalidateQueries({ queryKey: ['salonRequests'] });
       setViewModalVisible(false);
       setSelectedRequest(null);
     },
     onError: (error: any) => {
-      message.error(error?.message || 'Failed to update status');
+      message.error(error?.response?.data?.message || "Failed to update status");
     }
   });
 
@@ -155,7 +185,7 @@ const Request = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>Salon Requests</h1>
-          <p className="text-gray-600"  style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage salon registration requests</p>
+          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage salon registration requests</p>
           {requests.length > 0 && (
             <p className="text-sm text-gray-500 mt-1">
               Showing {filteredRequests.length} of {requests.length} requests
@@ -210,7 +240,7 @@ const Request = () => {
         footer={null} 
         centered 
         width={520}
-        destroyOnClose
+        destroyOnHidden
       >
         {selectedRequest && (
           <div className="space-y-5">
@@ -296,4 +326,5 @@ const Request = () => {
     </div>
   );
 };
+
 export default Request;

@@ -43,13 +43,12 @@ function Login() {
     if (submitted) setError("");
   };
 
-  const getCookie = (name: string) => {
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-      const [key, value] = cookie.trim().split('=');
-      if (key === name) return decodeURIComponent(value);
-    }
-    return null;
+  // ✅ Role mapping — String se Number mein convert karein
+  const roleMap: Record<string, number> = {
+    SuperAdmin: 1,
+    Admin: 2,
+    Employee: 3,
+    Customer: 4,
   };
 
   const loginMutation = useMutation({
@@ -71,23 +70,35 @@ function Login() {
         return;
       }
 
-      if (!data.result || !data.result.user) {
+      const result = data.result;
+      if (!result || !result.token) {
         setError("Invalid response from server");
         return;
       }
 
-      const user = data.result.user;
+      // ✅ String role ko number mein map karein
+      const roleNumber = roleMap[result.role] || 4; // default Customer
 
-      let token = getCookie('jwt_token') ||
-        getCookie('token') ||
-        getCookie('authToken') ||
-        user.id;
+      // ✅ User object — saari required fields ke saath
+      const user = {
+        id: result.userId,
+        fullName: result.fullName,
+        email: result.email,
+        role: roleNumber,              // ✅ Ab number hai (2, 3, 4)
+        companyId: result.companyId,
+        salonName: result.companyId,   // ✅ 🔥 YE LINE ADD KI — backend se companyId hi salonName bhej raha hai
+        isActive: true,
+        joinedDate: new Date().toISOString(),
+      };
+
+      const token = result.token;
 
       localStorage.setItem("user", JSON.stringify(user));
       localStorage.setItem("jwt_token", token);
       localStorage.setItem("authToken", token);
       dispatch(setLogin({ user, token }));
 
+      // ✅ Role check — ab number ke saath
       const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
       if (user.role === 2 && savedStatus[user.id] !== "approved") {
         setError("Login will only be allowed after approval by the Super Admin.");
@@ -97,6 +108,7 @@ function Login() {
       const redirectPath = localStorage.getItem("redirectAfterLogin");
       localStorage.removeItem("redirectAfterLogin");
 
+      // ✅ Number keys ke saath role routes
       const roleRoutes: Record<number, string> = {
         1: "/super-admin/deshboard",
         2: "/admin/dashboard",
@@ -201,5 +213,4 @@ function Login() {
     </div>
   );
 }
-
 export default Login;

@@ -227,7 +227,6 @@ const Settings = () => {
                   style={{ fontFamily: 'Public Sans, sans-serif', fontWeight: 'normal' }} 
                 />
               </Form.Item>
-              
               <Form.Item 
                 label="Salon Email" 
                 name="email" 
@@ -352,7 +351,7 @@ const Settings = () => {
                           disabled={isLoading}
                         />
                       </div>
-                    </div>
+                    </div>  
                   )}
                 </>
               ) : (

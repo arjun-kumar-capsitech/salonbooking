@@ -10,7 +10,6 @@ namespace SalonBackend.Controllers
     public class TimeController : ControllerBase
     {
         private readonly TimeService _timeService;
-
         public TimeController(TimeService timeService)
         {
             _timeService = timeService;

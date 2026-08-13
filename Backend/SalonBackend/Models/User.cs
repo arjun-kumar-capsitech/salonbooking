@@ -1,6 +1,5 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
-using System.Text.RegularExpressions;
 
 namespace SalonBackend.Models
 {
@@ -11,84 +10,69 @@ namespace SalonBackend.Models
         Employee = 3,
         Customer = 4
     }
-    
+
+    public enum ApprovalStatus
+    {
+        Pending,
+        Approved,
+        Rejected
+    }
+
     public class User
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; } = string.Empty;
 
-        private string _fullName = string.Empty;
-        public string FullName
-        {
-            get => _fullName;
-            set => _fullName = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-        }
+        [BsonElement("FullName")]
+        public string FullName { get; set; } = string.Empty;
 
-        private string _email = string.Empty;
+        [BsonElement("Email")]
         [BsonRequired]
-        public string Email
-        {
-            get => _email;
-            set => _email = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-        }
+        public string Email { get; set; } = string.Empty;
 
-        private string _phoneNumber = string.Empty;
-        public string PhoneNumber
-        {
-            get => _phoneNumber;
-            set => _phoneNumber = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-        }
+        [BsonElement("PhoneNumber")]
+        public string PhoneNumber { get; set; } = string.Empty;
 
-        private string _passwordHash = string.Empty;
-        public string PasswordHash
-        {
-            get => _passwordHash;
-            set => _passwordHash = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-        }
+        [BsonElement("PasswordHash")]
+        public string PasswordHash { get; set; } = string.Empty;
 
-        private string _salonName = string.Empty;
-        public string SalonName 
-        {
-            get => _salonName;
-            set => _salonName = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-     }
+        [BsonElement("SalonName")]
+        public string SalonName { get; set; } = string.Empty;
 
-        private string _salonAddress = string.Empty;
-        public string SalonAddress
-        {
-            get => _salonAddress;
-            set => _salonAddress = string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : Regex.Replace(value, @"\s+", " ").Trim();
-        }
+        [BsonElement("SalonAddress")]
+        public string SalonAddress { get; set; } = string.Empty;
 
+        [BsonElement("Role")]
         [BsonRepresentation(BsonType.String)]
         public UserRole Role { get; set; } = UserRole.Customer;
 
+        [BsonElement("ApprovalStatus")]
+        [BsonRepresentation(BsonType.String)]
+        public ApprovalStatus ApprovalStatus { get; set; } = ApprovalStatus.Approved;
+
+        [BsonElement("IsActive")]
         public bool IsActive { get; set; } = true;
 
+        [BsonElement("CreatedAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [BsonElement("UpdatedAt")]
         public DateTime? UpdatedAt { get; set; }
 
+        [BsonElement("CompanyId")]
         [BsonRepresentation(BsonType.ObjectId)]
         public string? CompanyId { get; set; }
 
+        [BsonElement("CustomerProfileId")]
         [BsonRepresentation(BsonType.ObjectId)]
         public string? CustomerProfileId { get; set; }
 
+        [BsonElement("EmployeeProfileId")]
         [BsonRepresentation(BsonType.ObjectId)]
         public string? EmployeeProfileId { get; set; }
-        public string? Name { get; internal set; }
+
+        [BsonElement("Name")]
+        public string? Name { get; set; }
     }
 }
