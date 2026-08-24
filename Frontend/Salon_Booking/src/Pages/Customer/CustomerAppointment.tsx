@@ -7,9 +7,39 @@ import { getSalonBookingAPI } from "../../api/generated";
 import type { AdminServices, Booking, BookingDto, SlotRequestDto, Staff, TimeDto, User } from "../../api/generated";
 import { UserRole } from "../../api/generated";
 import type { Salon, SlotDto } from "../../Types/Alltypes";
+
 const { Step } = Steps;
 const stepsData = ["Services", "Staff", "Date & Time", "Confirm"];
 const { getApiAdminServices, getApiStaff, getApiTime, getApiUser, postApiBooking, postApiSlotAvailableSlots } = getSalonBookingAPI();
+
+type ApiResponse = {
+  data?: unknown;
+  status?: boolean;
+  result?: unknown;
+  message?: string;
+};
+
+type SlotApiResponse = {
+  status?: boolean;
+  message?: string;
+  slots?: SlotDto[];
+  result?: {
+    slots?: SlotDto[];
+  };
+};
+
+type ApiError = {
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
+};
 
 const CustomerAppointment = () => {
   const [, setSelectedSalon] = useState<string | null>(null);
@@ -28,28 +58,36 @@ const CustomerAppointment = () => {
   const customerId = user.id || user.customerProfileId || undefined;
   const axiosConfig = { withCredentials: true };
 
-  const responseData = (response: unknown): any => {
+  const responseData = <T,>(response: unknown): T | null => {
     if (!response) return null;
-    const data = (response as any)?.data ?? response;
+
+    const responseObject = isRecord(response) ? response : null;
+    const data = responseObject && "data" in responseObject ? responseObject.data : response;
+
     if (typeof data === "string") {
       try {
-        return JSON.parse(data);
+        return JSON.parse(data) as T;
       } catch {
         return null;
       }
     }
-    return data;
+
+    return data as T;
   };
 
-  const extractData = (response: unknown): any[] => {
-    const data = responseData(response);
+  const extractData = <T,>(response: unknown): T[] => {
+    const data = responseData<ApiResponse>(response);
     if (!data) return [];
-    if (data?.status === true && data?.result) {
-      if (Array.isArray(data.result)) return data.result;
-      if (Array.isArray(data.result?.data)) return data.result.data;
+    if (data.status === true && data.result) {
+      if (Array.isArray(data.result)) return data.result as T[];
+      if (isRecord(data.result) && Array.isArray(data.result.data)) {
+        return data.result.data as T[];
+      }
     }
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data)) return data as unknown as T[];
+    if (isRecord(data) && Array.isArray(data.data)) {
+      return data.data as T[];
+    }
     return [];
   };
 
@@ -64,18 +102,28 @@ const CustomerAppointment = () => {
     queryFn: async () => {
       try {
         const response = await getApiUser({ page: 1, pageSize: 1000 }, axiosConfig);
-        const users = extractData(response) as User[];
+        const users = extractData<User>(response);
         const salonMap = new Map<string, Salon>();
         users.forEach(userData => {
           const role = userData.role;
           const salonName = userData.salonName?.trim();
           const id = userData.id;
-          if (role === UserRole.NUMBER_2 && salonName && id && userData.isActive !== false && !salonMap.has(salonName)) {
-            salonMap.set(salonName, { ...userData, id, salonName });
+          if (
+            role === UserRole.NUMBER_2 &&
+            salonName &&
+            id &&
+            userData.isActive !== false &&
+            !salonMap.has(salonName)
+          ) {
+            salonMap.set(salonName, {
+              ...userData,
+              id,
+              salonName
+            });
           }
         });
         return Array.from(salonMap.values());
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching salons:", error);
         return [];
       }
@@ -88,8 +136,12 @@ const CustomerAppointment = () => {
     queryFn: async () => {
       try {
         const response = await getApiAdminServices(axiosConfig);
-        return (extractData(response) as AdminServices[]).filter(service => service.isActive !== false && service.salonName === selectedSalonName);
-      } catch (error) {
+        return extractData<AdminServices>(response).filter(
+          service =>
+            service.isActive !== false &&
+            service.salonName === selectedSalonName
+        );
+      } catch (error: unknown) {
         console.error("Error fetching services:", error);
         return [];
       }
@@ -102,8 +154,12 @@ const CustomerAppointment = () => {
     queryFn: async () => {
       try {
         const response = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
-        return (extractData(response) as Staff[]).filter(staff => staff.isActive !== false && staff.salonName === selectedSalonName);
-      } catch (error) {
+        return extractData<Staff>(response).filter(
+          staff =>
+            staff.isActive !== false &&
+            staff.salonName === selectedSalonName
+        );
+      } catch (error: unknown) {
         console.error("Error fetching staff:", error);
         return [];
       }
@@ -115,8 +171,8 @@ const CustomerAppointment = () => {
     queryFn: async () => {
       try {
         const response = await getApiTime({}, axiosConfig);
-        return extractData(response) as TimeDto[];
-      } catch (error) {
+        return extractData<TimeDto>(response);
+      } catch (error: unknown) {
         console.error("Error fetching timings:", error);
         return [];
       }
@@ -125,49 +181,83 @@ const CustomerAppointment = () => {
 
   const getDayStatus = (dayName: string): TimeDto | null => {
     if (!selectedSalonAdminId) return null;
-    return allTimeSlots.find(slot => slot.userId === selectedSalonAdminId && slot.day === dayName) ?? null;
+    return allTimeSlots.find(
+      slot =>
+        slot.userId === selectedSalonAdminId &&
+        slot.day === dayName
+    ) ?? null;
   };
-  const getSalonDayStatus = (adminId: string, dayName: string): TimeDto | null => {
-    return allTimeSlots.find(slot => slot.userId === adminId && slot.day === dayName) ?? null;
-  };
-  const totalDuration = useMemo(() => selectedServices.reduce((total, service) => total + Number(service.duration || 0), 0), [selectedServices]);
-  const totalPrice = useMemo(() => selectedServices.reduce((total, service) => total + Number(service.price || 0), 0), [selectedServices]);
 
-  const { data: slotsResponse, isLoading: slotsLoading, isError: slotsError } = useQuery({
-    queryKey: ["availableSlots", selectedSalonAdminId, selectedStaff?.id, selectedDate?.format("YYYY-MM-DD"), selectedServices.map(service => service.id)],
-    enabled: !!selectedSalonAdminId && !!selectedStaff?.id && !!selectedDate && selectedServices.length > 0,
+  const getSalonDayStatus = (adminId: string, dayName: string): TimeDto | null => {
+    return allTimeSlots.find(
+      slot =>
+        slot.userId === adminId &&
+        slot.day === dayName
+    ) ?? null;
+  };
+
+  const totalDuration = useMemo(
+    () =>
+      selectedServices.reduce(
+        (total, service) =>
+          total + Number(service.duration || 0),
+        0
+      ),
+    [selectedServices]
+  );
+  const totalPrice = useMemo(
+    () =>
+      selectedServices.reduce(
+        (total, service) =>
+          total + Number(service.price || 0),
+        0
+      ),
+    [selectedServices]
+  );
+
+  const { data: slotsResponse, isLoading: slotsLoading, isError: slotsError } = useQuery<SlotApiResponse | null>({
+    queryKey: [
+      "availableSlots",
+      selectedSalonAdminId,
+      selectedStaff?.id,
+      selectedDate?.format("YYYY-MM-DD"),
+      selectedServices.map(service => service.id)
+    ],
+    enabled:
+      !!selectedSalonAdminId &&
+      !!selectedStaff?.id &&
+      !!selectedDate &&
+      selectedServices.length > 0,
     queryFn: async () => {
       const payload: SlotRequestDto = {
-        userId: selectedSalonAdminId,
-        staffId: selectedStaff?.id,
-        date: selectedDate?.toISOString(),
-        serviceIds: selectedServices.map(service => service.id).filter((id): id is string => !!id)
+        userId: selectedSalonAdminId!,
+        staffId: selectedStaff!.id!,
+        date: `${selectedDate!.format("YYYY-MM-DD")}T12:00:00`,
+        serviceIds: selectedServices
+          .map(service => service.id)
+          .filter((id): id is string => !!id)
       };
-      const response = await postApiSlotAvailableSlots(payload, axiosConfig);
-      return responseData(response);
+      const response = await postApiSlotAvailableSlots(
+        payload,
+        axiosConfig
+      );
+      return responseData<SlotApiResponse>(response);
     },
     staleTime: 0
   });
 
   const availableSlots = useMemo<SlotDto[]>(() => {
-    if (!slotsResponse?.status || !selectedDate) return [];
+    if (!slotsResponse?.status) return [];
     const slots: SlotDto[] = Array.isArray(slotsResponse.slots)
       ? slotsResponse.slots
       : Array.isArray(slotsResponse.result?.slots)
         ? slotsResponse.result.slots
         : [];
-    const now = dayjs();
-    const isToday = selectedDate.isSame(now, "day");
 
-    return slots.filter(slot => {
-      if (!slot.isAvailable) return false;
-      if (isToday) {
-        const slotStart = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${slot.startTime}`);
-        if (slotStart.isBefore(now)) return false;
-      }
-      return true;
-    });
-  }, [slotsResponse, selectedDate]);
+    return slots.filter(
+      slot => slot.isAvailable === true
+    );
+  }, [slotsResponse]);
 
   const handleSalonSelect = (salon: Salon) => {
     setSelectedSalon(salon.id);
@@ -183,8 +273,11 @@ const CustomerAppointment = () => {
   const createBookingMutation = useMutation({
     mutationFn: async (payload: BookingDto) => {
       const response = await postApiBooking(payload, axiosConfig);
-      const data = responseData(response);
-      return (data?.result ?? data) as Booking;
+      const data = responseData<Booking | { result?: Booking }>(response);
+      if (data && "result" in data && data.result) {
+        return data.result;
+      }
+      return data as Booking;
     },
     onSuccess: data => {
       setCreatedBooking(data);
@@ -206,9 +299,14 @@ const CustomerAppointment = () => {
         setCreatedBooking(null);
       }, 4000);
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
+      const apiError = error as ApiError;
       console.error("Booking error:", error);
-      message.error(error?.response?.data?.message || error?.message || "Booking failed");
+      message.error(
+        apiError.response?.data?.message ||
+        apiError.message ||
+        "Booking failed"
+      );
     }
   });
 
@@ -218,33 +316,39 @@ const CustomerAppointment = () => {
     const dayInfo = getDayStatus(current.format("dddd"));
     return !dayInfo || dayInfo.isOpen !== true;
   };
+
   const confirmBooking = async () => {
-    if (!selectedSlot || !selectedStaff?.id || !selectedDate || selectedServices.length === 0) {
+    if (
+      !selectedSlot ||
+      !selectedStaff?.id ||
+      !selectedDate ||
+      selectedServices.length === 0
+    ) {
       message.error("Please complete all steps");
       return;
     }
-    const serviceIds = selectedServices.map(service => service.id).filter((id): id is string => !!id);
+
+    const serviceIds = selectedServices
+      .map(service => service.id)
+      .filter((id): id is string => !!id);
     const payload: BookingDto = {
       customerId,
       customerName,
       staffId: selectedStaff.id,
       serviceIds,
-      appointmentDate: selectedDate.toISOString(),
+      appointmentDate: `${selectedDate.format("YYYY-MM-DD")}T12:00:00`,
       startTime: selectedSlot.startTime,
       endTime: selectedSlot.endTime,
       amount: totalPrice,
       salonName: selectedSalonName
     };
-
     await createBookingMutation.mutateAsync(payload);
   };
 
   const isInitialLoading = salonsLoading || timeLoading;
-
   if (isInitialLoading && step === -1) {
     return <Spin fullscreen />;
   }
-
   if (step === -1) {
     return (
       <div className="min-h-screen py-10 px-4 bg-gray-50">
@@ -252,7 +356,6 @@ const CustomerAppointment = () => {
           <div className="text-center mb-10">
             <h1 className="text-4xl font-bold text-gray-800 mb-3">Select Your Salon</h1>
             <p className="text-gray-600 text-lg">Choose from our premium salon partners</p>
-
             {salonsLoading ? (
               <div className="flex justify-center py-10">
                 <Spin size="large" />
@@ -275,28 +378,32 @@ const CustomerAppointment = () => {
 
                     return (
                       <Col xs={24} sm={12} lg={8} key={salon.id}>
-                        <Card hoverable className="text-center rounded-xl shadow hover:shadow-lg transition-shadow duration-300 cursor-pointer" onClick={() => handleSalonSelect(salon)}>
+                        <Card
+                          hoverable
+                          className="text-center rounded-xl shadow hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                          onClick={() => handleSalonSelect(salon)}
+                        >
                           <div className="py-4">
                             <div className="w-16 h-16 bg-[#197278] rounded-full flex items-center justify-center mx-auto mb-3">
                               <ShopOutlined style={{ fontSize: "1.5rem", color: "white" }} />
                             </div>
-
                             <h3 className="text-xl font-bold text-gray-800 mb-1">{salon.salonName}</h3>
-
                             <div className="flex items-center justify-center gap-2 mb-2">
                               <span className="text-gray-700">4.5</span>
                               <span className="text-gray-400 text-sm">(0)</span>
                             </div>
-
                             <div className="text-gray-500 text-sm mb-3">
                               <EnvironmentOutlined /> {salon.salonAddress || "Salon Address"}
                             </div>
-
                             <div className="flex items-center justify-center gap-2">
                               {dayInfo ? (
                                 <>
-                                  <Tag color={isOpen ? "green" : "red"}>{isOpen ? "Open Now" : "Closed"}</Tag>
-                                  <span className="text-xs text-gray-400">{opening} - {closing}</span>
+                                  <Tag color={isOpen ? "green" : "red"}>
+                                    {isOpen ? "Open Now" : "Closed"}
+                                  </Tag>
+                                  <span className="text-xs text-gray-400">
+                                    {opening} - {closing}
+                                  </span>
                                 </>
                               ) : (
                                 <Tag color="orange">Timings not set</Tag>
@@ -330,29 +437,43 @@ const CustomerAppointment = () => {
                     <div className="text-blue-100 text-sm">Selected Salon</div>
                   </div>
                 </div>
+
                 {(() => {
-                  const dayInfo = getDayStatus(dayjs().format("dddd"));
+                  const dayInfo = getDayStatus(
+                    selectedDate
+                      ? selectedDate.format("dddd")
+                      : dayjs().format("dddd")
+                  );
+
                   return dayInfo ? (
                     <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full">
                       <span className={`text-xs font-semibold ${dayInfo.isOpen ? "text-green-400" : "text-red-400"}`}>
                         {dayInfo.isOpen ? "Open" : "Closed"}
                       </span>
-                      <span className="text-xs text-white/80">{dayInfo.opening} - {dayInfo.closing}</span>
+                      <span className="text-xs text-white/80">
+                        {dayInfo.opening} - {dayInfo.closing}
+                      </span>
                     </div>
                   ) : (
-                    <div className="bg-white/20 px-3 py-1 rounded-full text-xs text-white/80">Timings not set</div>
+                    <div className="bg-white/20 px-3 py-1 rounded-full text-xs text-white/80">
+                      Timings not set
+                    </div>
                   );
                 })()}
               </div>
             </div>
           )}
           <Steps current={step} className="mb-6">
-            {stepsData.map(title => <Step key={title} title={title} />)}
+            {stepsData.map(title => (
+              <Step key={title} title={title} />
+            ))}
           </Steps>
           <div className="min-h-[250px]">
             {step === 0 && (
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-gray-700">Choose Services (Multiple)</h3>
+                <h3 className="text-lg font-semibold mb-4 text-gray-700">
+                  Choose Services (Multiple)
+                </h3>
                 {servicesLoading ? (
                   <div className="flex justify-center py-8">
                     <Spin />
@@ -364,24 +485,47 @@ const CustomerAppointment = () => {
                     ) : (
                       servicesApiData.map(service => {
                         const serviceId = service.id;
-                        const isChecked = !!serviceId && selectedServices.some(item => item.id === serviceId);
+                        const isChecked =
+                          !!serviceId &&
+                          selectedServices.some(
+                            item => item.id === serviceId
+                          );
                         return (
                           <div
                             key={serviceId || service.serviceName}
                             onClick={() => {
                               if (!serviceId) return;
-                              setSelectedServices(isChecked ? selectedServices.filter(item => item.id !== serviceId) : [...selectedServices, service]);
+                              setSelectedServices(
+                                isChecked
+                                  ? selectedServices.filter(
+                                    item => item.id !== serviceId
+                                  )
+                                  : [...selectedServices, service]
+                              );
                             }}
-                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isChecked ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isChecked
+                              ? "border-blue-400 bg-blue-50"
+                              : "border-gray-200 hover:border-blue-300"
+                              }`}
                           >
                             <div className="flex justify-between items-center">
                               <div>
-                                <div className="font-semibold text-gray-800">{service.serviceName || service.name || "Service"}</div>
-                                <div className="text-gray-500 text-sm">{service.duration || 0} min</div>
-                                {service.description && <div className="text-gray-400 text-xs">{service.description}</div>}
+                                <div className="font-semibold text-gray-800">
+                                  {service.serviceName || service.name || "Service"}
+                                </div>
+                                <div className="text-gray-500 text-sm">
+                                  {service.duration || 0} min
+                                </div>
+                                {service.description && (
+                                  <div className="text-gray-400 text-xs">
+                                    {service.description}
+                                  </div>
+                                )}
                               </div>
                               <div className="flex items-center gap-4">
-                                <div className={`font-bold ${isChecked ? "text-blue-600" : "text-gray-800"}`}>${Number(service.price || 0).toFixed(2)}</div>
+                                <div className={`font-bold ${isChecked ? "text-blue-600" : "text-gray-800"}`}>
+                                  ${Number(service.price || 0).toFixed(2)}
+                                </div>
                                 <Checkbox checked={isChecked} />
                               </div>
                             </div>
@@ -394,9 +538,15 @@ const CustomerAppointment = () => {
                 {selectedServices.length > 0 && (
                   <div className="mt-4 p-3 bg-gray-100 rounded-lg">
                     <div className="flex justify-between text-sm">
-                      <span>Selected: {selectedServices.length} service(s)</span>
-                      <span>Total Duration: {totalDuration} min</span>
-                      <span className="font-bold">Total: ${totalPrice.toFixed(2)}</span>
+                      <span>
+                        Selected: {selectedServices.length} service(s)
+                      </span>
+                      <span>
+                        Total Duration: {totalDuration} min
+                      </span>
+                      <span className="font-bold">
+                        Total: ${totalPrice.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -424,18 +574,34 @@ const CustomerAppointment = () => {
                         return (
                           <div
                             key={staffId || staff.fullName}
-                            onClick={() => staffId && setSelectedStaff(staff)}
-                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isSelected ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
+                            onClick={() =>
+                              staffId && setSelectedStaff(staff)
+                            }
+                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isSelected
+                              ? "border-blue-400 bg-blue-50"
+                              : "border-gray-200 hover:border-blue-300"
+                              }`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isSelected ? "bg-[#197278]" : "bg-gray-400"}`}>
-                                <span className="text-white font-bold text-xl">{(staff.fullName || staff.name || "S").charAt(0).toUpperCase()}</span>
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isSelected ? "bg-[#197278]" : "bg-gray-400"
+                                }`}>
+                                <span className="text-white font-bold text-xl">
+                                  {(staff.fullName || staff.name || "S")
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </span>
                               </div>
                               <div>
-                                <div className="font-semibold text-gray-800 text-lg">{staff.fullName || staff.name || "Staff"}</div>
-                                <div className="text-gray-500 text-sm">{staff.role || "Employee"}</div>
+                                <div className="font-semibold text-gray-800 text-lg">
+                                  {staff.fullName || staff.name || "Staff"}
+                                </div>
+                                <div className="text-gray-500 text-sm">
+                                  {staff.role || "Employee"}
+                                </div>
                               </div>
-                              {isSelected && <CheckCircleOutlined className="text-blue-600 text-lg ml-auto" />}
+                              {isSelected && (
+                                <CheckCircleOutlined className="text-blue-600 text-lg ml-auto" />
+                              )}
                             </div>
                           </div>
                         );
@@ -454,7 +620,9 @@ const CustomerAppointment = () => {
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium text-gray-600 block mb-1">Date</label>
+                    <label className="text-sm font-medium text-gray-600 block mb-1">
+                      Date
+                    </label>
                     <DatePicker
                       className="w-full p-2 border rounded-lg"
                       onChange={date => {
@@ -468,83 +636,136 @@ const CustomerAppointment = () => {
                       value={selectedDate}
                     />
                     {selectedDate && (
-                      <div className="mt-1 text-sm text-blue-600">{selectedDate.format("dddd, DD MMM YYYY")}</div>
+                      <div className="mt-1 text-sm text-blue-600">
+                        {selectedDate.format("dddd, DD MMM YYYY")}
+                      </div>
                     )}
                   </div>
 
-                  {selectedDate && selectedStaff && selectedServices.length > 0 && (
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-medium">Available Time Slots</span>
-                        {slotsLoading && <Spin size="small" />}
-                      </div>
-                      {slotsLoading ? (
-                        <div className="text-center py-4">Loading slots...</div>
-                      ) : slotsError ? (
-                        <div className="text-red-500">Error loading slots</div>
-                      ) : availableSlots.length === 0 ? (
-                        <div className="text-center py-4 text-gray-400">No available slots for the selected criteria</div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {availableSlots.map(slot => {
-                            const isSelected = selectedSlot?.startTime === slot.startTime && selectedSlot?.endTime === slot.endTime;
-                            return (
-                              <Card
-                                key={`${slot.startTime}-${slot.endTime}`}
-                                className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
-                                onClick={() => setSelectedSlot(slot)}
-                                size="small"
-                              >
-                                <div className="text-center">
-                                  <ClockCircleOutlined className="text-blue-500 mr-1" />
-                                  <span className="font-medium">{formatTime(slot.startTime)}</span>
-                                  <span className="mx-1">-</span>
-                                  <span className="font-medium">{formatTime(slot.endTime)}</span>
-                                  {isSelected && <Tag color="blue" className="mt-1 block">Selected</Tag>}
-                                </div>
-                              </Card>
-                            );
-                          })}
+                  {selectedDate &&
+                    selectedStaff &&
+                    selectedServices.length > 0 && (
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-medium">
+                            Available Time Slots
+                          </span>
+                          {slotsLoading && <Spin size="small" />}
                         </div>
-                      )}
-                    </div>
-                  )}
+                        {slotsLoading ? (
+                          <div className="text-center py-4">
+                            Loading slots...
+                          </div>
+                        ) : slotsError ? (
+                          <div className="text-red-500">
+                            Error loading slots
+                          </div>
+                        ) : availableSlots.length === 0 ? (
+                          <div className="text-center py-4 text-gray-400">
+                            {slotsResponse?.message || "No available slots for the selected criteria"}
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {availableSlots.map(slot => {
+                              const isSelected =
+                                selectedSlot?.startTime === slot.startTime &&
+                                selectedSlot?.endTime === slot.endTime;
+
+                              return (
+                                <Card
+                                  key={`${slot.startTime}-${slot.endTime}`}
+                                  className={`cursor-pointer transition-all hover:shadow-md ${isSelected
+                                    ? "border-blue-500 bg-blue-50"
+                                    : "border-gray-200"
+                                    }`}
+                                  onClick={() => setSelectedSlot(slot)}
+                                  size="small"
+                                >
+                                  <div className="text-center">
+                                    <ClockCircleOutlined className="text-blue-500 mr-1" />
+                                    <span className="font-medium">
+                                      {formatTime(slot.startTime)}
+                                    </span>
+                                    <span className="mx-1">-</span>
+                                    <span className="font-medium">
+                                      {formatTime(slot.endTime)}
+                                    </span>
+                                    {isSelected && (
+                                      <Tag color="blue" className="mt-1 block">
+                                        Selected
+                                      </Tag>
+                                    )}
+                                  </div>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </div>
               </div>
             )}
 
             {step === 3 && (
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-gray-700">Review Your Booking</h3>
+                <h3 className="text-lg font-semibold mb-4 text-gray-700">
+                  Review Your Booking
+                </h3>
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="space-y-2">
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Salon</span>
-                      <span className="font-medium text-gray-800">{selectedSalonName}</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedSalonName}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Services</span>
-                      <span className="font-medium text-gray-800">{selectedServices.map(service => service.serviceName || service.name || "Service").join(", ")}</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedServices
+                          .map(
+                            service =>
+                              service.serviceName ||
+                              service.name ||
+                              "Service"
+                          )
+                          .join(", ")}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Stylist</span>
-                      <span className="font-medium text-gray-800">{selectedStaff?.fullName || selectedStaff?.name}</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedStaff?.fullName || selectedStaff?.name}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Date</span>
-                      <span className="font-medium text-gray-800">{selectedDate?.format("DD MMM YYYY")}</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedDate?.format("DD MMM YYYY")}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Time Slot</span>
-                      <span className="font-medium text-gray-800">{selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : "Not selected"}</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedSlot
+                          ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}`
+                          : "Not selected"}
+                      </span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Duration</span>
-                      <span className="font-medium text-gray-800">{totalDuration} min</span>
+                      <span className="font-medium text-gray-800">
+                        {totalDuration} min
+                      </span>
                     </div>
                     <div className="flex justify-between py-1">
-                      <span className="font-semibold text-gray-700">Total</span>
-                      <span className="font-bold text-blue-600 text-lg">${totalPrice.toFixed(2)}</span>
+                      <span className="font-semibold text-gray-700">
+                        Total
+                      </span>
+                      <span className="font-bold text-blue-600 text-lg">
+                        ${totalPrice.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -553,14 +774,24 @@ const CustomerAppointment = () => {
           </div>
           <Divider className="my-4" />
           <div className="flex justify-between">
-            <Button onClick={() => setStep(step - 1)} disabled={step === 0}>Back</Button>
+            <Button
+              onClick={() => setStep(step - 1)}
+              disabled={step === 0}
+            >
+              Back
+            </Button>
             {step === 3 ? (
               <Button
                 type="primary"
                 onClick={confirmBooking}
                 loading={createBookingMutation.isPending}
                 className="bg-blue-500 hover:bg-blue-600 border-none"
-                disabled={!selectedSlot || !selectedStaff?.id || !selectedDate || selectedServices.length === 0}
+                disabled={
+                  !selectedSlot ||
+                  !selectedStaff?.id ||
+                  !selectedDate ||
+                  selectedServices.length === 0
+                }
               >
                 Confirm Booking
               </Button>
@@ -568,7 +799,11 @@ const CustomerAppointment = () => {
               <Button
                 type="primary"
                 onClick={() => setStep(step + 1)}
-                disabled={(step === 0 && selectedServices.length === 0) || (step === 1 && !selectedStaff?.id) || (step === 2 && (!selectedDate || !selectedSlot))}
+                disabled={
+                  (step === 0 && selectedServices.length === 0) ||
+                  (step === 1 && !selectedStaff?.id) ||
+                  (step === 2 && (!selectedDate || !selectedSlot))
+                }
                 className="bg-blue-500 hover:bg-blue-600 border-none"
               >
                 Next
@@ -577,43 +812,73 @@ const CustomerAppointment = () => {
           </div>
         </Card>
       </div>
-
-      <Modal open={showConfirmation} footer={null} closable={false} centered>
+      <Modal
+        open={showConfirmation}
+        footer={null}
+        closable={false}
+        centered
+      >
         <div className="text-center py-6">
           <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
             <CheckCircleOutlined className="text-2xl text-blue-500" />
           </div>
-          <h3 className="text-xl font-bold mb-1 text-gray-800">Booking Confirmed!</h3>
-          <p className="text-gray-600 text-sm mb-3">Your appointment has been booked successfully.</p>
+          <h3 className="text-xl font-bold mb-1 text-gray-800">
+            Booking Confirmed!
+          </h3>
+          <p className="text-gray-600 text-sm mb-3">
+            Your appointment has been booked successfully.
+          </p>
 
           {createdBooking && (
             <div className="bg-blue-50 p-3 rounded text-left text-sm border border-blue-200">
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Salon</span>
-                <span className="font-medium text-gray-800">{createdBooking.salonName || selectedSalonName}</span>
+                <span className="font-medium text-gray-800">
+                  {createdBooking.salonName || selectedSalonName}
+                </span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Services</span>
-                <span className="font-medium text-gray-800">{selectedServices.map(service => service.serviceName || service.name || "Service").join(", ")}</span>
+                <span className="font-medium text-gray-800">
+                  {selectedServices
+                    .map(
+                      service =>
+                        service.serviceName ||
+                        service.name ||
+                        "Service"
+                    )
+                    .join(", ")}
+                </span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Staff</span>
-                <span className="font-medium text-gray-800">{createdBooking.fullName || selectedStaff?.fullName || selectedStaff?.name}</span>
+                <span className="font-medium text-gray-800">
+                  {createdBooking.fullName ||
+                    selectedStaff?.fullName ||
+                    selectedStaff?.name}
+                </span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Date & Time</span>
                 <span className="font-medium text-gray-800">
-                  {selectedDate?.format("DD MMM YYYY")} {selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : ""}
+                  {selectedDate?.format("DD MMM YYYY")}{" "}
+                  {selectedSlot
+                    ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}`
+                    : ""}
                 </span>
               </div>
-
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Total</span>
-                <span className="font-bold text-blue-600">${Number(createdBooking.amount ?? totalPrice).toFixed(2)}</span>
+
+                <span className="font-bold text-blue-600">
+                  ${Number(createdBooking.amount ?? totalPrice).toFixed(2)}
+                </span>
               </div>
             </div>
           )}
-          <div className="mt-4 text-sm text-blue-400">Redirecting...</div>
+          <div className="mt-4 text-sm text-blue-400">
+            Redirecting...
+          </div>
         </div>
       </Modal>
     </div>
