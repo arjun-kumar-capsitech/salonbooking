@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Modal, Button, Form } from 'antd';
+import React from "react";
+import { Modal, Button, Form } from "antd";
 
 interface ModalFormProps {
   open: boolean;
@@ -23,42 +23,20 @@ const Modals: React.FC<ModalFormProps> = ({
   onSubmit,
   loading = false,
   children,
-  submitText = 'Submit',
-  cancelText = 'Cancel',
+  submitText = "Submit",
+  cancelText = "Cancel",
   width = 400,
-  form: externalForm
+  form: externalForm,
 }) => {
   const [internalForm] = Form.useForm();
   const form = externalForm || internalForm;
-  const formRef = useRef(form);
-
-  useEffect(() => {
-    formRef.current = form;
-  }, [form]);
-
-  useEffect(() => {
-    if (open && initialValues) {
-      form.setFieldsValue(initialValues);
-    }
-  }, [open, initialValues, form]);
-
-  useEffect(() => {
-    if (!open) {
-      form.resetFields();
-    }
-  }, [open, form]);
 
   const handleSubmit = (values: any) => {
     onSubmit(values);
-    if (!externalForm) {
-      form.resetFields();
-    }
   };
 
   const handleCancel = () => {
-    if (!externalForm) {
-      form.resetFields();
-    }
+    form.resetFields();
     onClose();
   };
 
@@ -69,28 +47,37 @@ const Modals: React.FC<ModalFormProps> = ({
       onCancel={handleCancel}
       width={width}
       centered
-      destroyOnHidden={true}
+      destroyOnHidden
       maskClosable={false}
-      style={{ fontFamily: 'Public Sans, sans-serif', fontWeight: 'normal' }}
+      style={{
+        fontFamily: "Public Sans, sans-serif",
+        fontWeight: "normal",
+      }}
       footer={[
-        <Button 
-          key="cancel" 
-          onClick={handleCancel} 
+        <Button
+          key="cancel"
+          onClick={handleCancel}
           disabled={loading}
-          style={{ fontFamily: 'Public Sans, sans-serif', fontWeight: 'normal' }}
+          style={{
+            fontFamily: "Public Sans, sans-serif",
+            fontWeight: "normal",
+          }}
         >
           {cancelText}
         </Button>,
-        <Button 
+        <Button
           key="submit"
-          type="primary" 
+          type="primary"
           loading={loading}
           onClick={() => form.submit()}
           disabled={loading}
-          style={{ fontFamily: 'Public Sans, sans-serif', fontWeight: 'normal' }}
+          style={{
+            fontFamily: "Public Sans, sans-serif",
+            fontWeight: "normal",
+          }}
         >
           {submitText}
-        </Button>
+        </Button>,
       ]}
     >
       <Form
@@ -98,7 +85,10 @@ const Modals: React.FC<ModalFormProps> = ({
         layout="vertical"
         initialValues={initialValues}
         onFinish={handleSubmit}
-        style={{ fontFamily: 'Public Sans, sans-serif', fontWeight: 'normal' }}
+        style={{
+          fontFamily: "Public Sans, sans-serif",
+          fontWeight: "normal",
+        }}
       >
         {children}
       </Form>

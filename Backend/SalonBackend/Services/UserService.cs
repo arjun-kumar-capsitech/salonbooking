@@ -34,10 +34,8 @@ namespace SalonBackend.Services
             var user = await _users.Find(u => u.Email == email).FirstOrDefaultAsync();
             if (user == null)
                 return new AuthResult { Success = false, Message = "Invalid email or password" };
-
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
                 return new AuthResult { Success = false, Message = "Invalid email or password" };
-
             if (user.Role == UserRole.Admin && user.ApprovalStatus != ApprovalStatus.Approved)
             {
                 var msg = user.ApprovalStatus == ApprovalStatus.Rejected
@@ -45,10 +43,9 @@ namespace SalonBackend.Services
                     : "Your salon registration is waiting for Super Admin approval.";
                 return new AuthResult { Success = false, Message = msg };
             }
-
+            
             if (!user.IsActive)
                 return new AuthResult { Success = false, Message = "Account is deactivated" };
-
             var token = GenerateJwtToken(user);
 
             return new AuthResult

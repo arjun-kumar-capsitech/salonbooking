@@ -8,7 +8,10 @@ interface Props {
 }
 
 const ProtectedRoute = ({ children, allowedRoles }: Props) => {
-  const { token, user, isLoading } = useSelector((state: any) => state.auth);
+  const { user, isLoading } = useSelector(
+    (state: any) => state.auth
+  );
+
   const location = useLocation();
 
   if (isLoading) {
@@ -22,39 +25,62 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
     );
   }
 
-  const storedToken = localStorage.getItem("token") || 
-                     localStorage.getItem("jwt_token") || 
-                     localStorage.getItem("authToken");
   const storedUser = localStorage.getItem("user");
-
-  const finalToken = token || storedToken;
-  const finalUser = user || (storedUser ? JSON.parse(storedUser) : null);
-
-  if (!finalToken || !finalUser) {
-    localStorage.setItem("redirectAfterLogin", location.pathname + location.search);
+  const finalUser =
+    user ||
+    (storedUser ? JSON.parse(storedUser) : null);
+  if (!finalUser) {
+    localStorage.setItem(
+      "redirectAfterLogin",
+      location.pathname + location.search
+    );
     return <Navigate to="/" replace />;
   }
-
-  const isPublicRoute = location.pathname.startsWith('/customer') || 
-                        location.pathname.startsWith('/user');
-
-  if (isPublicRoute) {
-    return <>{children}</>;
-  }
-
-  if (allowedRoles && allowedRoles.length > 0) {
-    if (!finalUser.role || !allowedRoles.includes(finalUser.role)) {
-      const roleRoutes: Record<number, string> = {
-        1: "/super-admin/deshboard",
-        2: "/admin/dashboard",
-        3: "/employee/dashboard",
-        4: "/customer/booking",
-      };
-      return <Navigate to={roleRoutes[finalUser.role] || "/"} replace />;
+  const getRoleNumber = (role: any) => {
+    if (typeof role === "number") {
+      return role;
     }
-  }
 
+    switch (String(role).toLowerCase()) {
+      case "superadmin":
+        return 1;
+
+      case "admin":
+        return 2;
+
+      case "employee":
+        return 3;
+
+      case "customer":
+        return 4;
+
+      default:
+        return 0;
+    }
+  };
+
+  const userRole = getRoleNumber(
+    finalUser.role ?? finalUser.Role
+  );
+
+  if (
+    allowedRoles &&
+    allowedRoles.length > 0 &&
+    !allowedRoles.includes(userRole)
+  ) {
+    const roleRoutes: Record<number, string> = {
+      1: "/super-admin/deshboard",
+      2: "/admin/dashboard",
+      3: "/employee/deshbord",
+      4: "/customer/booking",
+    };
+    return (
+      <Navigate
+        to={roleRoutes[userRole] || "/"}
+        replace
+      />
+    );
+  }
   return <>{children}</>;
 };
-
 export default ProtectedRoute;

@@ -1,59 +1,66 @@
-// Redux/Store/Slice/authSlice.ts
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
 
-interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  isActive: boolean;
-  joinedDate: string;
-  role: string | number;
+interface AuthUser {
+  userId?: string | null;
+  fullName?: string | null;
+  email?: string | null;
+  role?: string | number | null;
+  companyId?: string | null;
+  expiresAt?: string;
+  salonName?: string | null;
 }
 
 interface AuthState {
+  user: AuthUser | null;
+  isLoading: boolean;
   isAuthenticated: boolean;
-  user: User | null;
-  token: string | null;
 }
 
+const storedUser = localStorage.getItem("user");
 const initialState: AuthState = {
-  isAuthenticated: false,
-  user: null,
-  token: null,
+  user: storedUser ? JSON.parse(storedUser) : null,
+  isLoading: false,
+  isAuthenticated: !!storedUser,
 };
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
   reducers: {
-    setLogin: (state, action: PayloadAction<{ user: User; token: string }>) => {
-      state.isAuthenticated = true;
+    setLogin: (
+      state,
+      action: PayloadAction<{
+        user: AuthUser;
+      }>
+    ) => {
       state.user = action.payload.user;
-      state.token = action.payload.token;
-      
-      // ✅ Also store in localStorage
-      localStorage.setItem("user", JSON.stringify(action.payload.user));
-      localStorage.setItem("jwt_token", action.payload.token);
+      state.isAuthenticated = true;
+      state.isLoading = false;
+      localStorage.setItem(
+        "user",
+        JSON.stringify(action.payload.user)
+      );
     },
+
     setLogout: (state) => {
-      state.isAuthenticated = false;
       state.user = null;
-      state.token = null;
-      
-      // ✅ Clear storage
+      state.isAuthenticated = false;
+      state.isLoading = false;
       localStorage.removeItem("user");
-      localStorage.removeItem("jwt_token");
-      localStorage.removeItem("authToken");
-      localStorage.removeItem("token");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("lastVisitedPath");
+      localStorage.removeItem("redirectAfterLogin");
     },
-    updateUser: (state, action: PayloadAction<Partial<User>>) => {
-      if (state.user) {
-        state.user = { ...state.user, ...action.payload };
-        localStorage.setItem("user", JSON.stringify(state.user));
-      }
-    }
-  }
+    setLoading: (state, action: PayloadAction<boolean>) => {
+      state.isLoading = action.payload;
+    },
+  },
 });
 
-export const { setLogin, setLogout, updateUser } = authSlice.actions;
+export const {
+  setLogin,
+  setLogout,
+  setLoading,
+} = authSlice.actions;
+
 export default authSlice.reducer;

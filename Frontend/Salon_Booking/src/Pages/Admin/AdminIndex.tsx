@@ -1,307 +1,443 @@
-import { TeamOutlined, ScissorOutlined, DollarOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { DataTable, StatusBadge } from '../../Components/Ui/Table';
-import { StatCard } from '../../Components/Ui/Cards';
-import { useQuery } from '@tanstack/react-query';
-import { Card, Button, Row, Col } from 'antd';
-import { getSalonBookingAPI } from '../../api/generated';
+import { TeamOutlined, ScissorOutlined, DollarOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import { DataTable, StatusBadge } from "../../Components/Ui/Table";
+import { StatCard } from "../../Components/Ui/Cards";
+import { useQuery } from "@tanstack/react-query";
+import { Card, Button, Row, Col } from "antd";
+import { getSalonBookingAPI, type Staff, type AdminServices, type Booking } from "../../api/generated";
+import type { DashboardStaff, DashboardService, DashboardBooking } from "../../Types/Alltypes";
 
 const { getApiStaff, getApiAdminServices, getApiBooking } = getSalonBookingAPI();
+const axiosConfig = { withCredentials: true };
+
+interface ApiResult<T> {
+  status?: boolean;
+  result?: T[] | {
+    data?: T[] | null;
+  } | null;
+}
+
+const parseResponse = <T,>(data: unknown): T | null => {
+  if (!data) return null;
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  return data as T;
+};
+
+const getResultData = <T,>(result: T[] | { data?: T[] | null } | null | undefined): T[] => {
+  if (Array.isArray(result)) {
+    return result;
+  }
+  if (result && Array.isArray(result.data)) {
+    return result.data;
+  }
+  return [];
+};
+
+interface StoredUser {
+  role?: string | number;
+  Role?: string | number;
+  salonName?: string;
+  SalonName?: string;
+}
 
 const AdminIndex = () => {
   const navigate = useNavigate();
-  const token = localStorage.getItem("authToken");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const userRole = user?.Role || user?.role;
-  const userSalonName = user?.SalonName || user?.salonName;
-  const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
-  const isSuperAdmin = userRole === "SuperAdmin";
-
-  const axiosConfig = {
-    headers: {},
-  };
-
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
-      try {
-        return JSON.parse(response.data);
-      } catch {
-        return null;
-      }
+  const user: StoredUser = (() => {
+    try {
+      const storedUser = localStorage.getItem("user");
+      return storedUser ? (JSON.parse(storedUser) as StoredUser) : {};
+    } catch {
+      return {};
     }
-    return response.data;
-  };
+  })();
 
-  const extractData = (response: any) => {
-    if (!response) return [];
-    const parsedData = ResponseData(response);
-    if (!parsedData?.status === true || !parsedData?.result?.data) {
-      return [];
-    }
-    return parsedData.result.data;
-  };
+  const userRole = user.Role ?? user.role;
+  const userSalonName = user.SalonName ?? user.salonName;
+  const isAdmin = userRole === "Admin" || userRole === 2;
+  const isSuperAdmin = userRole === "SuperAdmin" || userRole === 1;
 
-  const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['staff'],
-    enabled: !!token,
+  const { data: staffApiData = [], isLoading: staffLoading } = useQuery<DashboardStaff[]>({
+    queryKey: ["dashboard-staff", userSalonName],
     queryFn: async () => {
-      const res = await getApiStaff(
+      const response = await getApiStaff(
         { page: 1, pageSize: 100 },
         axiosConfig
       );
-      let staffData = extractData(res);
-      let filteredStaff = Array.isArray(staffData) ? staffData : [];
-      if (isAdmin && !isSuperAdmin && userSalonName) {
-        filteredStaff = filteredStaff.filter((s: any) =>
-          (s.salonName || s.SalonName) === userSalonName
-        );
-      }
-      return filteredStaff.map((s: any, index: any) => ({
-        key: s.id || s._id || index,
-        id: s.id || s._id,
-        name: s.name || s.Name || s.fullName || s.FullName || "N/A",
-        role: s.role || s.Role || "Employee",
-        status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
+      const data = parseResponse<ApiResult<Staff>>(response.data);
+      const staffData = getResultData<Staff>(data?.result);
+      const filteredStaff =
+        isAdmin && !isSuperAdmin && userSalonName
+          ? staffData.filter(
+              (item) => item.salonName === userSalonName
+            )
+          : staffData;
+      return filteredStaff.map((item, index) => ({
+        ...item,
+        key: item.id ?? index,
+        status: item.isActive ? "active" : "inactive",
       }));
-    }
+    },
   });
 
-  const { data: services = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['services'],
-    enabled: !!token,
+  const { data: services = [], isLoading: servicesLoading } = useQuery<DashboardService[]>({
+    queryKey: ["dashboard-services", userSalonName],
     queryFn: async () => {
-      const res = await getApiAdminServices(axiosConfig);
-      const parsedData = ResponseData(res);
-      let servicesData = [];
-      if (parsedData?.status === true && parsedData?.result) {
-        servicesData = Array.isArray(parsedData.result) ? parsedData.result : [];
-      }
-      let filteredServices = Array.isArray(servicesData) ? servicesData : [];
-      if (isAdmin && !isSuperAdmin && userSalonName) {
-        filteredServices = filteredServices.filter((s: any) =>
-          (s.salonName || s.SalonName) === userSalonName
-        );
-      }
-      return filteredServices.map((s: any, index: number) => ({
-        key: s.id || s._id || index,
-        id: s.id || s._id,
-        name: s.serviceName || s.ServiceName || s.name || "N/A",
-        duration: s.duration || s.Duration || 0,
-        price: s.price || s.Price || 0,
-        status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive'
+      const response = await getApiAdminServices(axiosConfig);
+      const data = parseResponse<ApiResult<AdminServices>>(response.data);
+      const servicesData = getResultData<AdminServices>(data?.result);
+      const filteredServices =
+        isAdmin && !isSuperAdmin && userSalonName
+          ? servicesData.filter(
+              (item) =>
+                item.salonName === userSalonName ||
+                item.salonName === "All"
+            )
+          : servicesData;
+
+      return filteredServices.map((item, index) => ({
+        ...item,
+        key: item.id ?? index,
+        name: item.serviceName ?? "N/A",
+        duration: item.duration ?? 0,
+        price: item.price ?? 0,
+        status: item.isActive ? "active" : "inactive",
       }));
-    }
+    },
   });
 
-  const { data: bookings = [] } = useQuery({
-    queryKey: ['bookings'],
-    enabled: !!token,
+  const { data: bookings = [] } = useQuery<DashboardBooking[]>({
+    queryKey: ["dashboard-bookings", userSalonName],
     queryFn: async () => {
-      const res = await getApiBooking(
+      const response = await getApiBooking(
         { page: 1, pageSize: 100 },
         axiosConfig
       );
-      let bookingsData = extractData(res);
-      let filteredBookings = Array.isArray(bookingsData) ? bookingsData : [];
-      if (isAdmin && !isSuperAdmin && userSalonName) {
-        filteredBookings = filteredBookings.filter((b: any) =>
-          (b.salonName || b.SalonName) === userSalonName
-        );
-      }
-
-      return filteredBookings.map((b: any, index: number) => {
-        let amount = 0;
-        const status = (b.status || b.Status || "").toLowerCase();
-        if (status !== 'cancelled') {
-          if (b.amount) amount = parseFloat(b.amount);
-          else if (b.Amount) amount = parseFloat(b.Amount);
-        }
+      const data = parseResponse<ApiResult<Booking>>(response.data);
+      const bookingData = getResultData<Booking>(data?.result);
+      const filteredBookings =
+        isAdmin && !isSuperAdmin && userSalonName
+          ? bookingData.filter(
+              (item) => item.salonName === userSalonName
+            )
+          : bookingData;
+      return filteredBookings.map((item, index) => {
+        const status = String(item.status ?? "").toLowerCase();
+        const amount =
+          status === "cancelled"
+            ? 0
+            : Number(item.amount ?? 0);
         return {
-          key: b.id || b._id || index,
-          id: b.id || b._id || index,
-          amount: isNaN(amount) ? 0 : amount,
-          date: b.appointmentDate || b.AppointmentDate || b.createdAt || b.CreatedAt || new Date(),
-          status: status
+          ...item,
+          key: item.id ?? index,
+          date:
+            item.appointmentDate ??
+            new Date().toISOString(),
+          amount: Number.isNaN(amount) ? 0 : amount,
+          status,
         };
       });
-    }
+    },
   });
 
-  const revenue = bookings.reduce((sum: number, b: any) => sum + (b.amount || 0), 0);
+  const revenue = bookings.reduce(
+    (sum, booking) =>
+      sum + Number(booking.amount || 0),
+    0
+  );
   const monthlyData = (() => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const revenueByMonth = new Array(12).fill(0);
-    bookings.forEach((booking: any) => {
-      const month = new Date(booking.date).getMonth();
-      revenueByMonth[month] += booking.amount;
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+
+    const revenueByMonth = new Array<number>(12).fill(0);
+    bookings.forEach((booking) => {
+      const date = new Date(booking.date);
+      if (!Number.isNaN(date.getTime())) {
+        revenueByMonth[date.getMonth()] += Number(
+          booking.amount || 0
+        );
+      }
     });
     return months.map((month, index) => ({
       month,
       revenue: revenueByMonth[index],
-      isActive: revenueByMonth[index] > 0
     }));
   })();
 
-  const maxYValue = Math.max(...monthlyData.map(d => d.revenue), 5000);
-  const yAxisLabels = [maxYValue, maxYValue * 0.75, maxYValue * 0.5, maxYValue * 0.25, 0];
+  const maxYValue = Math.max(
+    ...monthlyData.map((data) => data.revenue),
+    5000
+  );
+
+  const yAxisLabels = [
+    maxYValue,
+    maxYValue * 0.75,
+    maxYValue * 0.5,
+    maxYValue * 0.25,
+    0,
+  ];
 
   const serviceColumns = [
-    { title: 'Service Name', dataIndex: 'name' },
-    { title: 'Duration (min)', dataIndex: 'duration' },
     {
-      title: 'Price',
-      dataIndex: 'price',
-      render: (price: number) => `$${price?.toFixed(2) || '0.00'}`
+      title: "Service Name",
+      dataIndex: "name",
     },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      render: (status: string) => <StatusBadge type="user" value={status} />
-    }
+      title: "Duration (min)",
+      dataIndex: "duration",
+    },
+    {
+      title: "Price",
+      dataIndex: "price",
+      render: (price: number) =>
+        `$${Number(price || 0).toFixed(2)}`,
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (status: string) => (
+        <StatusBadge
+          type="service"
+          value={status}
+        />
+      ),
+    },
   ];
 
   const staffColumns = [
-    { title: 'Name', dataIndex: 'name' },
-    { title: 'Role', dataIndex: 'role' },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      render: (status: string) => <StatusBadge type="user" value={status} />
-    }
+      title: "Name",
+      dataIndex: "name",
+    },
+    {
+      title: "Role",
+      dataIndex: "role",
+    },
+    {
+      title: "Status",
+      dataIndex: "status",
+      render: (status: string) => (
+        <StatusBadge
+          type="user"
+          value={status}
+        />
+      ),
+    },
   ];
 
-  if (!token) {
-    return (
-      <div className="p-6 text-center">
-        <Card>
-          <p style={{ fontFamily: 'Public Sans, sans-serif' }}>Please login to view dashboard</p>
-        </Card>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6" style={{ fontFamily: 'Public Sans, sans-serif' }}>
-      <div>
-        <h1 className="text-2xl font-bold mb-2" style={{ fontFamily: 'PT Serif, serif' }}>Admin Dashboard Overview</h1>
-        <p className="text-gray-600 mb-6" style={{ fontFamily: 'Public Sans, sans-serif' }} >
-          Hello again! Here's what's happening in your salon.
-        </p>
-        <Row gutter={[16, 16]} className="mb-6">
-          <Col xs={24} sm={8} md={8}>
-            <StatCard
-              title="Active Services"
-              value={services.filter(s => s.status === 'active').length.toString()}
-              icon={<ScissorOutlined />}
-              color="#087e8b"
-            />
-          </Col>
+    <div
+      className="p-6"
+      style={{
+        fontFamily: "Public Sans, sans-serif",
+      }}
+    >
+      <h1
+        className="text-2xl font-bold mb-2"
+        style={{
+          fontFamily: "PT Serif, serif",
+        }}
+      >
+        Admin Dashboard Overview
+      </h1>
+      <p className="text-gray-600 mb-6">
+        Hello again! Here's what's happening in your salon.
+      </p>
+      <Row gutter={[16, 16]} className="mb-6">
+        <Col xs={24} sm={8} md={8}>
+          <StatCard
+            title="Active Services"
+            value={services
+              .filter(
+                (service) =>
+                  service.status === "active"
+              )
+              .length.toString()}
+            icon={<ScissorOutlined />}
+            color="#087e8b"
+          />
+        </Col>
+        <Col xs={24} sm={8} md={8}>
+          <StatCard
+            title="Active Staff"
+            value={`${staffApiData.filter(
+              (staff) =>
+                staff.status === "active"
+            ).length}/${staffApiData.length}`}
+            icon={<TeamOutlined />}
+            color="#003049"
+          />
+        </Col>
+        <Col xs={24} sm={8} md={8}>
+          <StatCard
+            title="Total Revenue"
+            value={`$${revenue.toLocaleString()}`}
+            icon={<DollarOutlined />}
+            color="#6f1d1b"
+          />
+        </Col>
+      </Row>
+      <Card
+        className="mb-6"
+        title={
+          <span
+            style={{
+              fontFamily: "PT Serif, serif",
+            }}
+          >
+            Revenue Trend (Monthly)
+          </span>
+        }
+      >
+        <div className="flex h-80">
+          <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24">
+            {yAxisLabels.map((label, index) => (
+              <div key={index}>
+                ${Math.round(label).toLocaleString()}
+              </div>
+            ))}
+          </div>
+          <div className="flex-1 flex flex-col">
+            <div className="relative flex-1">
+              <div className="absolute inset-0 flex flex-col justify-between">
+                {[0, 1, 2, 3, 4].map(
+                  (index) => (
+                    <div
+                      key={index}
+                      className="border-t border-gray-300 w-full"
+                    />
+                  )
+                )}
+              </div>
+              <div className="relative h-full flex items-end gap-2">
+                {monthlyData.map(
+                  (data, index) => {
+                    const barHeight =
+                      maxYValue > 0
+                        ? (data.revenue /
+                            maxYValue) *
+                          100
+                        : 0;
 
-          <Col xs={24} sm={8} md={8}>
-            <StatCard
-              title="Active Staff"
-              value={`${staffApiData.filter((s: any) => s.status === 'active').length}/${staffApiData.length}`}
-              icon={<TeamOutlined />}
-              color="#003049"
-            />
-          </Col>
-
-          <Col xs={24} sm={8} md={8}>
-            <StatCard
-              title="Total Revenue"
-              value={`$${revenue.toLocaleString()}`}
-              icon={<DollarOutlined />}
-              color="#6f1d1b"
-            />
-          </Col>
-        </Row>
-
-        <Card className="mb-6" title={<span style={{ fontFamily: 'PT Serif, serif' }}>Revenue Trend (Monthly)</span>}>
-          <div className="flex h-80">
-            <div className="flex flex-col justify-between pr-4 text-right text-sm text-gray-500 w-24" style={{ fontFamily: 'Public Sans, sans-serif' }}>
-              {yAxisLabels.map((label, idx) => (
-                <div key={idx}>${Math.round(label).toLocaleString()}</div>
-              ))}
-            </div>
-
-            <div className="flex-1 flex flex-col">
-              <div className="relative flex-1">
-                <div className="absolute inset-0 flex flex-col justify-between">
-                  {[0, 1, 2, 3, 4].map((idx) => (
-                    <div key={idx} className="border-t border-gray-300 w-full"></div>
-                  ))}
-                </div>
-                <div className="relative h-full flex items-end gap-2">
-                  {monthlyData.map((data, idx) => {
-                    const barHeight = maxYValue > 0 ? (data.revenue / maxYValue) * 100 : 0;
                     return (
-                      <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end">
+                      <div
+                        key={index}
+                        className="flex-1 flex flex-col items-center h-full justify-end"
+                      >
                         <div
                           className="w-full bg-gradient-to-t from-[#023e7d] to-[#0466c8] rounded-lg transition-all duration-500 hover:from-[#0466c8] hover:to-[#035c9e] cursor-pointer relative group"
                           style={{
                             height: `${barHeight}%`,
-                            minHeight: data.revenue > 0 ? '4px' : '0px'
+                            minHeight:
+                              data.revenue > 0
+                                ? "4px"
+                                : "0px",
                           }}
                         >
-                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10" style={{ fontFamily: 'Public Sans, sans-serif' }}>
-                            ${data.revenue.toLocaleString()}
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                            $
+                            {data.revenue.toLocaleString()}
                           </div>
                         </div>
                         <div className="text-center mt-2">
-                          <div className="text-xs font-medium text-gray-700" style={{ fontFamily: 'Public Sans, sans-serif' }}>{data.month}</div>
+                          <div className="text-xs font-medium text-gray-700">
+                            {data.month}
+                          </div>
                         </div>
                       </div>
                     );
-                  })}
-                </div>
+                  }
+                )}
               </div>
             </div>
           </div>
-
-          <div className="mt-4 pt-3 text-center text-gray-500 text-sm" style={{ fontFamily: 'Public Sans, sans-serif' }}>
-            <span>Monthly revenue performance (Target: ${maxYValue.toLocaleString()})</span>
-          </div>
-        </Card>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
-          <Card
-            title={<span style={{ fontFamily: 'PT Serif, serif' }}>Services</span>}
-            extra={
-              <Button type="primary" size="small" onClick={() => navigate('/admin/services')} style={{ fontFamily: 'Public Sans, sans-serif' }}>
-                View All
-              </Button>
-            }
-          >
-            <DataTable
-              data={services}
-              columns={serviceColumns}
-              showActions={false}
-              rowKey="key"
-              loading={servicesLoading}
-            />
-          </Card>
-
-          <Card
-            title={<span style={{ fontFamily: 'PT Serif, serif' }}>Staff Availability</span>}
-            extra={
-              <Button type="primary" size="small" onClick={() => navigate('/admin/staff')} style={{ fontFamily: 'Public Sans, sans-serif' }}>
-                View All
-              </Button>
-            }
-          >
-            <DataTable
-              data={staffApiData}
-              columns={staffColumns}
-              loading={staffLoading}
-              showActions={false}
-              rowKey="key"
-            />
-          </Card>
         </div>
+        <div className="mt-4 pt-3 text-center text-gray-500 text-sm">
+          Monthly revenue performance (Target: $
+          {maxYValue.toLocaleString()})
+        </div>
+      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-8">
+        <Card
+          title={
+            <span
+              style={{
+                fontFamily: "PT Serif, serif",
+              }}
+            >
+              Services
+            </span>
+          }
+          extra={
+            <Button
+              type="primary"
+              size="small"
+              onClick={() =>
+                navigate("/admin/services")
+              }
+            >
+              View All
+            </Button>
+          }
+        >
+          <DataTable
+            data={services}
+            columns={serviceColumns}
+            showActions={false}
+            rowKey="key"
+            loading={servicesLoading}
+          />
+        </Card>
+        <Card
+          title={
+            <span
+              style={{
+                fontFamily: "PT Serif, serif",
+              }}
+            >
+              Staff Availability
+            </span>
+          }
+          extra={
+            <Button
+              type="primary"
+              size="small"
+              onClick={() =>
+                navigate("/admin/staff")
+              }
+            >
+              View All
+            </Button>
+          }
+        >
+          <DataTable
+            data={staffApiData}
+            columns={staffColumns}
+            loading={staffLoading}
+            showActions={false}
+            rowKey="key"
+          />
+        </Card>
       </div>
     </div>
   );
 };
-
 export default AdminIndex;

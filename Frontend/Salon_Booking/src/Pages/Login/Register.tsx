@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { getSalonBookingAPI } from "../../api/generated";
-const {  postApiUserRegisterCustomer,  postApiUserRegisterAdmin } = getSalonBookingAPI();
+import { getSalonBookingAPI, type RegisterAdminRequest, type RegisterCustomerRequest, } from "../../api/generated";
+const { postApiUserRegisterCustomer, postApiUserRegisterAdmin } = getSalonBookingAPI();
 
 function Register() {
   const [showPassword, setShowPassword] = useState(false);
@@ -57,7 +57,6 @@ function Register() {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (submitted) setError("");
   };
-
   const getFieldError = (field: string) => {
     return submitted ? validateField(field, formData[field as keyof typeof formData]) : "";
   };
@@ -71,7 +70,7 @@ function Register() {
   };
 
   const customerRegisterMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: RegisterCustomerRequest) => {
       const response = await postApiUserRegisterCustomer(data);
       return response.data;
     },
@@ -83,40 +82,39 @@ function Register() {
         setError(data.message || "Registration failed");
       }
     },
-    onError: (err: any) => {
-      const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
-      setError(errorMessage);
-    }
+    onError: (err) => {
+      console.error(err);
+      setError("Registration failed. Please try again.");
+    },
   });
 
-  // Admin Registration Mutation
   const adminRegisterMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: RegisterAdminRequest) => {
       const response = await postApiUserRegisterAdmin(data);
       return response.data;
     },
     onSuccess: (data) => {
       if (data.status === true) {
         setSuccess(data.message || "Registration successful!");
+
         setTimeout(() => navigate("/login"), 1500);
       } else {
         setError(data.message || "Registration failed");
       }
     },
-    onError: (err: any) => {
-      const errorMessage = err?.response?.data?.message || "Connection error. Please try again.";
-      setError(errorMessage);
-    }
+
+    onError: (err) => {
+      console.error(err);
+      setError("Connection error. Please try again.");
+    },
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     setError("");
     setSuccess("");
-
     if (!isFormValid()) return;
-
     if (userType === "Customer") {
       customerRegisterMutation.mutate({
         fullName: formData.fullName,
@@ -137,7 +135,6 @@ function Register() {
       });
     }
   };
-
   const isLoading = customerRegisterMutation.isPending || adminRegisterMutation.isPending;
 
   return (
@@ -157,16 +154,14 @@ function Register() {
             {success}
           </div>
         )}
-
         <div className="flex gap-4 mb-8 justify-center">
           <button
             type="button"
             onClick={() => { setUserType("Admin"); setSubmitted(false); setError(""); }}
-            className={`flex-1 py-3 px-2 rounded-lg border text-sm font-medium transition-all ${
-              userType === "Admin"
-                ? "border-blue-600 text-blue-600 bg-blue-50"
-                : "border-gray-300 text-gray-500 hover:border-gray-400"
-            }`}
+            className={`flex-1 py-3 px-2 rounded-lg border text-sm font-medium transition-all ${userType === "Admin"
+              ? "border-blue-600 text-blue-600 bg-blue-50"
+              : "border-gray-300 text-gray-500 hover:border-gray-400"
+              }`}
             disabled={isLoading}
           >
             Barber Shop
@@ -174,17 +169,15 @@ function Register() {
           <button
             type="button"
             onClick={() => { setUserType("Customer"); setSubmitted(false); setError(""); }}
-            className={`flex-1 py-3 px-2 rounded-lg border text-sm font-medium transition-all ${
-              userType === "Customer"
-                ? "border-blue-600 text-blue-600 bg-blue-50"
-                : "border-gray-300 text-gray-500 hover:border-gray-400"
-            }`}
+            className={`flex-1 py-3 px-2 rounded-lg border text-sm font-medium transition-all ${userType === "Customer"
+              ? "border-blue-600 text-blue-600 bg-blue-50"
+              : "border-gray-300 text-gray-500 hover:border-gray-400"
+              }`}
             disabled={isLoading}
           >
             Customer
           </button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <input
@@ -193,14 +186,12 @@ function Register() {
               placeholder="Full Name"
               value={formData.fullName}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                getFieldError("fullName") ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("fullName") ? "border-red-500" : "border-gray-300"
+                }`}
               disabled={isLoading}
             />
             {getFieldError("fullName") && <p className="text-red-500 text-sm mt-1">{getFieldError("fullName")}</p>}
           </div>
-
           <div>
             <input
               type="email"
@@ -208,14 +199,12 @@ function Register() {
               placeholder="Email"
               value={formData.email}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                getFieldError("email") ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("email") ? "border-red-500" : "border-gray-300"
+                }`}
               disabled={isLoading}
             />
             {getFieldError("email") && <p className="text-red-500 text-sm mt-1">{getFieldError("email")}</p>}
           </div>
-
           <div>
             <input
               type="tel"
@@ -223,14 +212,12 @@ function Register() {
               placeholder="Phone No."
               value={formData.phoneNo}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                getFieldError("phoneNo") ? "border-red-500" : "border-gray-300"
-              }`}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("phoneNo") ? "border-red-500" : "border-gray-300"
+                }`}
               disabled={isLoading}
             />
             {getFieldError("phoneNo") && <p className="text-red-500 text-sm mt-1">{getFieldError("phoneNo")}</p>}
           </div>
-
           {userType === "Admin" && (
             <>
               <div>
@@ -240,9 +227,8 @@ function Register() {
                   placeholder="Salon Name"
                   value={formData.salonName}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    getFieldError("salonName") ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("salonName") ? "border-red-500" : "border-gray-300"
+                    }`}
                   disabled={isLoading}
                 />
                 {getFieldError("salonName") && <p className="text-red-500 text-sm mt-1">{getFieldError("salonName")}</p>}
@@ -253,9 +239,8 @@ function Register() {
                   placeholder="Salon Address"
                   value={formData.salonAddress}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    getFieldError("salonAddress") ? "border-red-500" : "border-gray-300"
-                  }`}
+                  className={`w-full px-4 py-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("salonAddress") ? "border-red-500" : "border-gray-300"
+                    }`}
                   disabled={isLoading}
                   rows={2}
                 />
@@ -263,7 +248,6 @@ function Register() {
               </div>
             </>
           )}
-
           <div>
             <div className="relative">
               <input
@@ -272,9 +256,8 @@ function Register() {
                 placeholder="Password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  getFieldError("password") ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("password") ? "border-red-500" : "border-gray-300"
+                  }`}
                 disabled={isLoading}
               />
               <button
@@ -288,7 +271,6 @@ function Register() {
             </div>
             {getFieldError("password") && <p className="text-red-500 text-sm mt-1">{getFieldError("password")}</p>}
           </div>
-
           <div>
             <div className="relative">
               <input
@@ -297,9 +279,8 @@ function Register() {
                 placeholder="Confirm Password"
                 value={formData.confirmPassword}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                  getFieldError("confirmPassword") ? "border-red-500" : "border-gray-300"
-                }`}
+                className={`w-full px-4 py-3 border rounded-lg pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500 ${getFieldError("confirmPassword") ? "border-red-500" : "border-gray-300"
+                  }`}
                 disabled={isLoading}
               />
               <button
@@ -313,7 +294,6 @@ function Register() {
             </div>
             {getFieldError("confirmPassword") && <p className="text-red-500 text-sm mt-1">{getFieldError("confirmPassword")}</p>}
           </div>
-
           <button
             type="submit"
             className="w-full bg-blue-600 text-white py-3.5 rounded-lg font-medium hover:bg-blue-700 transition-colors mt-4 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -321,7 +301,6 @@ function Register() {
           >
             {isLoading ? "Registering..." : "Sign Up"}
           </button>
-
           <p className="text-center text-gray-600 text-sm mt-6">
             Already have an account?{" "}
             <Link to="/" className="text-blue-600 font-medium hover:text-blue-800">

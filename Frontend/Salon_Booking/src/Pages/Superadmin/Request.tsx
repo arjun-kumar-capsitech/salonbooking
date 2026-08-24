@@ -1,320 +1,287 @@
-import { useState, useMemo, useEffect } from "react";
-import { Button, Input, message, Modal, Card, Spin } from "antd";
-import { SearchOutlined, CheckOutlined, CloseOutlined, ShopOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState } from "react";
+import { Button, Card, Modal, Spin, message } from "antd";
+import { CheckOutlined, CloseOutlined, ShopOutlined } from "@ant-design/icons";
 import { useDispatch } from "react-redux";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { showSuperAdminRequest } from "../../Redux/Store/Slice/columnsSlice";
 import { DataTable } from "../../Components/Ui/Table";
-import { getSalonBookingAPI } from '../../api/generated';
-import { useSearch } from '../../utils/FilterData';
-import axios from 'axios';
+import SearchInput from "../../Components/Ui/SearchInput";
+import { getSalonBookingAPI, type User } from "../../api/generated";
+import { useSearch } from "../../utils/FilterData";
+import type { ApiResponse, RequestRow, UserResult } from "../../Types/Alltypes";
 
-const { getApiUser } = getSalonBookingAPI();
-const API_BASE = "http://localhost:5296";
+const api = getSalonBookingAPI();
+const apiOptions = { withCredentials: true };
 
-const StatusBadge = ({ status }: { status: string }) => {
-  const getStatusColor = () => {
-    switch (status?.toLowerCase()) {
-      case "approved": return { bg: "#f6ffed", color: "#52c41a", text: "Approved" };
-      case "rejected": return { bg: "#fff2f0", color: "#ff4d4f", text: "Rejected" };
-      default: return { bg: "#fff7e6", color: "#faad14", text: "Pending" };
-    }
-  };
-  const { bg, color, text } = getStatusColor();
-  return (
-    <span style={{ 
-      backgroundColor: bg, 
-      color: color, 
-      padding: "4px 12px", 
-      borderRadius: "20px", 
-      fontSize: "12px", 
-      fontWeight: 500, 
-      display: "inline-block" 
-    }}>
-      {text}
-    </span>
-  );
+const parseResponse = <T,>(data: unknown): T | null => {
+  if (typeof data !== "string") return data as T;
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
+};
+
+const getUsersFromResponse = (data: unknown): User[] => {
+  const response = parseResponse<ApiResponse<UserResult> | ApiResponse<User[]> | User[]>(data);
+  if (Array.isArray(response)) return response;
+  if (!response?.result) return [];
+  if (Array.isArray(response.result)) return response.result;
+  return response.result.data ?? [];
+};
+
+const getApprovalStatus = (value: unknown): string => {
+  if (typeof value === "number") {
+    if (value === 1) return "approved";
+    if (value === 2) return "rejected";
+    return "pending";
+  }
+  const status = String(value ?? "pending").toLowerCase();
+  if (status === "approve" || status === "approved") return "approved";
+  if (status === "reject" || status === "rejected") return "rejected";
+  return "pending";
 };
 
 const Request = () => {
   const dispatch = useDispatch();
-  const [viewModalVisible, setViewModalVisible] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
-  const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
-
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
-      try {
-        return JSON.parse(response.data);
-      } catch {
-        return null;
-      }
-    }
-    return response.data;
-  };
-
+  const [viewModalVisible, setViewModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<RequestRow | null>(null);
   useEffect(() => {
     dispatch(showSuperAdminRequest());
   }, [dispatch]);
 
-  const { data: requests = [], isLoading } = useQuery({
-    queryKey: ['salonRequests'],
-    enabled: !!token,
+  const { data: requests = [], isLoading, isFetching } = useQuery<RequestRow[]>({
+    queryKey: ["salonRequests"],
     queryFn: async () => {
-      const response = await getApiUser({ page: 1, pageSize: 100 }, axiosConfig);
-      const parsedData = ResponseData(response);
-      if (!parsedData?.status || !parsedData?.result) {
-        return [];
-      }
-
-      let rawUsers = [];
-      const result = parsedData.result;
-      if (Array.isArray(result)) {
-        rawUsers = result;
-      } else if (result?.data && Array.isArray(result.data)) {
-        rawUsers = result.data;
-      } else {
-        return [];
-      }
-
-      return rawUsers
-        .filter((u: any) => {
-          const role = u.role ?? u.Role;
-          return role === 2 || role === "Admin" || role === "admin";
+      const response = await api.getApiUser(
+        { page: 1, pageSize: 100 },
+        apiOptions
+      );
+      const users = getUsersFromResponse(response.data);
+      return users
+        .filter((user) => {
+          const role = user.role;
+          return role === 2 || String(role).toLowerCase() === "admin";
         })
-        .map((u: any) => {
-          let status = 'pending';
-          const rawStatus = u.approvalStatus ?? u.ApprovalStatus;
-          if (typeof rawStatus === 'string') {
-            status = rawStatus.toLowerCase();
-          } else if (typeof rawStatus === 'number') {
-            switch (rawStatus) {
-              case 1: status = 'approved'; break;
-              case 2: status = 'rejected'; break;
-              default: status = 'pending'; break;
-            }
-          }
-          return {
-            id: u.id || u._id,
-            companyName: u.salonName || u.SalonName || u.fullName || u.FullName || 'N/A',
-            owner: u.fullName || u.FullName || u.name || 'N/A',
-            email: u.email || u.Email || 'N/A',
-            requestDate: u.createdAt || u.CreatedAt || new Date().toISOString(),
-            status: status,
-          };
-        });
-    }
+        .map((user): RequestRow => ({
+          id: String(user.id ?? ""),
+          salonName: String(user.salonName ?? user.fullName ?? user.name ?? "N/A"),
+          owner: String(user.fullName ?? user.name ?? "N/A"),
+          email: String(user.email ?? "N/A"),
+          requestDate: String(user.createdAt ?? ""),
+          status: getApprovalStatus(user.approvalStatus),
+        }));
+    },
+    staleTime: 30000,
   });
 
-  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
+  const { searchText, setSearchText, filteredData } = useSearch<RequestRow>(
     requests,
-    ['companyName', 'owner', 'email'],
+    ["salonName", "owner", "email"],
     500
   );
 
-  const filteredRequests = useMemo(() => {
-    return searchFilteredData || [];
-  }, [searchFilteredData]);
+  const filteredRequests = useMemo(
+    () => filteredData ?? [],
+    [filteredData]
+  );
 
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const endpoint = status === "approved" 
-        ? `${API_BASE}/api/User/approve-admin/${id}`
-        : `${API_BASE}/api/User/reject-admin/${id}`;
-      const response = await axios.put(endpoint, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return response.data;
+    mutationFn: async ({
+      status,
+    }: {
+      id: string;
+      status: "approved" | "rejected";
+    }) => {
+      throw new Error(
+        `Orval endpoint for ${status} is not available in generated.ts`
+      );
     },
     onSuccess: () => {
       message.success("Request updated successfully");
-      queryClient.invalidateQueries({ queryKey: ['salonRequests'] });
+      void queryClient.invalidateQueries({
+        queryKey: ["salonRequests"],
+      });
       setViewModalVisible(false);
       setSelectedRequest(null);
     },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.message || "Failed to update status");
-    }
+    onError: (error: Error) => {
+      message.error(error.message || "Failed to update request");
+    },
   });
 
-  const handleApprove = (id: string) => {
-    updateStatusMutation.mutate({ id, status: "approved" });
+  const handleApprove = () => {
+    if (!selectedRequest?.id) return;
+    updateStatusMutation.mutate({
+      id: selectedRequest.id,
+      status: "approved",
+    });
   };
 
-  const handleReject = (id: string) => {
-    updateStatusMutation.mutate({ id, status: "rejected" });
+  const handleReject = () => {
+    if (!selectedRequest?.id) return;
+    updateStatusMutation.mutate({
+      id: selectedRequest.id,
+      status: "rejected",
+    });
   };
 
-  const columns = [
-    {
-      title: "Company Name",
-      dataIndex: "companyName",
-      render: (text: string, record: any) => (
-        <div>
-          <div className="font-medium">{text}</div>
-          <div className="text-gray-500 text-sm">Owner: {record.owner}</div>
-        </div>
-      ),
-    },
-    { 
-      title: "Email", 
-      dataIndex: "email",
-      render: (text: string) => <span>{text}</span>
-    },
-    { 
-      title: "Request Date", 
-      dataIndex: "requestDate", 
-      render: (date: string) => new Date(date).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
-    },
-    { 
-      title: "Status", 
-      dataIndex: "status", 
-      render: (status: string) => <StatusBadge status={status} /> 
-    },
-  ];
+  const closeModal = () => {
+    setViewModalVisible(false);
+    setSelectedRequest(null);
+  };
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>Salon Requests</h1>
-          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage salon registration requests</p>
-          {requests.length > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Showing {filteredRequests.length} of {requests.length} requests
-            </p>
-          )}
-        </div>
+      <div className="mb-6">
+        <h1
+          className="text-2xl font-bold"
+          style={{ fontFamily: "PT Serif, serif" }}
+        >
+          Salon Requests
+        </h1>
+        <p
+          className="text-gray-600"
+          style={{ fontFamily: "Public Sans, sans-serif" }}
+        >
+          Manage salon registration requests
+        </p>
+        {requests.length > 0 && (
+          <p className="mt-1 text-sm text-gray-500">
+            Showing {filteredRequests.length} of {requests.length} requests
+          </p>
+        )}
       </div>
 
       <Card className="mb-6">
-        <div className="flex gap-4">
-          <Input 
-            placeholder="Search by company, owner or email" 
-            prefix={<SearchOutlined />} 
-            value={searchText} 
-            onChange={(e) => setSearchText(e.target.value)} 
-            style={{ width: 400 }} 
-            allowClear
-          />
-        </div>
+        <SearchInput
+          searchText={searchText}
+          onSearchChange={setSearchText}
+          placeholder="Search company, owner or email..."
+          width={400}
+        />
       </Card>
-
       <Card>
-        <div className="p-2 font-medium mb-4">
-          All Request Data
-        </div>
-        {isLoading ? (
-          <div className="flex justify-center items-center py-10">
-            <Spin size="large" />
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 p-2 font-medium">
+            <span>All Request Data</span>
+            {isFetching && !isLoading && <Spin size="small" />}
           </div>
-        ) : (
-          <DataTable 
-            data={filteredRequests} 
-            columns={columns} 
-            loading={isLoading} 
-            rowKey="id" 
-            showActions={true} 
-            onView={(record) => { 
-              setSelectedRequest(record); 
-              setViewModalVisible(true); 
-            }} 
-          />
+        </div>
+        <DataTable
+          data={filteredRequests}
+          tableType="requests"
+          loading={isLoading}
+          rowKey="id"
+          showActions
+          onView={(record: RequestRow) => {
+            setSelectedRequest(record);
+            setViewModalVisible(true);
+          }}
+        />
+        {!isLoading && filteredRequests.length === 0 && (
+          <div className="py-8 text-center text-gray-500">
+            No salon requests found
+          </div>
         )}
       </Card>
-
-      <Modal 
-        title="Request Details" 
-        open={viewModalVisible} 
-        onCancel={() => { 
-          setViewModalVisible(false); 
-          setSelectedRequest(null); 
-        }} 
-        footer={null} 
-        centered 
+      <Modal
+        title={
+          <div className="flex items-center gap-2">
+            <ShopOutlined />
+            <span>Request Details</span>
+          </div>
+        }
+        open={viewModalVisible}
+        onCancel={closeModal}
+        footer={null}
+        centered
         width={520}
         destroyOnHidden
       >
         {selectedRequest && (
           <div className="space-y-5">
-            <div className="flex items-center gap-4 pb-3 border-b">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <ShopOutlined className="text-blue-600 text-xl" />
+            <div className="flex items-center gap-4 border-b pb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+                <ShopOutlined className="text-xl text-blue-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold">{selectedRequest.companyName}</h3>
-                <p className="text-gray-500 text-sm">Salon Registration Request</p>
+                <h3 className="text-lg font-bold">
+                  {selectedRequest.salonName}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Salon Registration Request
+                </p>
               </div>
             </div>
-            
             <div>
-              <div className="text-sm text-gray-500 mb-1">Owner Name</div>
-              <div className="font-medium text-base">{selectedRequest.owner}</div>
+              <p className="mb-1 text-sm text-gray-500">Owner Name</p>
+              <p className="font-medium">{selectedRequest.owner}</p>
             </div>
-            
             <div>
-              <div className="text-sm text-gray-500 mb-1">Email Address</div>
-              <div className="text-base">{selectedRequest.email}</div>
+              <p className="mb-1 text-sm text-gray-500">Email Address</p>
+              <p>{selectedRequest.email}</p>
             </div>
-            
             <div>
-              <div className="text-sm text-gray-500 mb-1">Request Date</div>
-              <div className="text-base">
-                {new Date(selectedRequest.requestDate).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-              </div>
+              <p className="mb-1 text-sm text-gray-500">Request Date</p>
+              <p>
+                {selectedRequest.requestDate
+                  ? new Date(selectedRequest.requestDate).toLocaleString(
+                      "en-US",
+                      {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )
+                  : "N/A"}
+              </p>
             </div>
-            
             <div>
-              <div className="text-sm text-gray-500 mb-1">Current Status</div>
-              <StatusBadge status={selectedRequest.status} />
+              <p className="mb-1 text-sm text-gray-500">Current Status</p>
+              <span
+                className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
+                  selectedRequest.status === "approved"
+                    ? "bg-green-100 text-green-700"
+                    : selectedRequest.status === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-yellow-100 text-yellow-700"
+                }`}
+              >
+                {selectedRequest.status.toUpperCase()}
+              </span>
             </div>
-            
-            {selectedRequest.status === "pending" && (
-              <div className="flex gap-3 pt-4 border-t mt-2">
-                <Button 
-                  type="primary" 
-                  icon={<CheckOutlined />} 
-                  onClick={() => handleApprove(selectedRequest.id)} 
-                  className="flex-1" 
-                  style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+            {selectedRequest.status === "pending" ? (
+              <div className="flex gap-3 border-t pt-4">
+                <Button
+                  type="primary"
+                  icon={<CheckOutlined />}
+                  onClick={handleApprove}
                   loading={updateStatusMutation.isPending}
+                  className="flex-1"
                 >
                   Approve Request
                 </Button>
-                <Button 
-                  danger 
-                  icon={<CloseOutlined />} 
-                  onClick={() => handleReject(selectedRequest.id)} 
-                  className="flex-1"
+
+                <Button
+                  danger
+                  icon={<CloseOutlined />}
+                  onClick={handleReject}
                   loading={updateStatusMutation.isPending}
+                  className="flex-1"
                 >
                   Reject Request
                 </Button>
               </div>
-            )}
-            
-            {selectedRequest.status !== "pending" && (
-              <div className="flex gap-3 pt-4 border-t mt-2">
-                <Button 
-                  type="primary" 
-                  onClick={() => { 
-                    setViewModalVisible(false); 
-                    setSelectedRequest(null); 
-                  }} 
-                  className="flex-1"
+            ) : (
+              <div className="border-t pt-4">
+                <Button
+                  type="primary"
+                  onClick={closeModal}
+                  className="w-full"
                 >
                   Close
                 </Button>
@@ -326,5 +293,4 @@ const Request = () => {
     </div>
   );
 };
-
 export default Request;

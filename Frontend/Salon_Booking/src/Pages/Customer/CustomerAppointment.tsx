@@ -1,120 +1,77 @@
-import React, { useState, useMemo } from "react";
-import { Card, Button, Row, Col, Modal, Steps, DatePicker, Divider, message, Spin, Tag, Empty, Checkbox } from "antd";
-import { ShopOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, EnvironmentOutlined, CalendarOutlined } from "@ant-design/icons";
+import { Button, Card, Checkbox, Col, DatePicker, Divider, Empty, Modal, Row, Spin, Steps, Tag, message } from "antd";
+import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, EnvironmentOutlined, ShopOutlined, UserOutlined } from "@ant-design/icons";
 import dayjs, { Dayjs } from "dayjs";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getSalonBookingAPI } from '../../api/generated';
-import axios from 'axios';
-
+import { getSalonBookingAPI } from "../../api/generated";
+import type { AdminServices, Booking, BookingDto, SlotRequestDto, Staff, TimeDto, User } from "../../api/generated";
+import { UserRole } from "../../api/generated";
+import type { Salon, SlotDto } from "../../Types/Alltypes";
 const { Step } = Steps;
 const stepsData = ["Services", "Staff", "Date & Time", "Confirm"];
+const { getApiAdminServices, getApiStaff, getApiTime, getApiUser, postApiBooking, postApiSlotAvailableSlots } = getSalonBookingAPI();
 
-const {
-  getApiAdminServices,
-  getApiStaff,
-  getApiTime,
-  getApiUser,
-  postApiBooking
-} = getSalonBookingAPI();
-
-const BASE_URL = 'http://localhost:5296';
-
-interface SlotDto {
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
-}
-
-const CustomerAppointment: React.FC = () => {
+const CustomerAppointment = () => {
   const [, setSelectedSalon] = useState<string | null>(null);
   const [selectedSalonName, setSelectedSalonName] = useState<string | null>(null);
   const [selectedSalonAdminId, setSelectedSalonAdminId] = useState<string | null>(null);
   const [step, setStep] = useState(-1);
-  const [selectedServices, setSelectedServices] = useState<any[]>([]);
+  const [selectedServices, setSelectedServices] = useState<AdminServices[]>([]);
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
-  const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotDto | null>(null);
-  const [createdBooking, setCreatedBooking] = useState<any>(null);
+  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const loggedInUserId = user?.id || user?._id;
-  const customerName = user?.fullName || user?.FullName || user?.name || "Customer";
+  const user = JSON.parse(localStorage.getItem("user") || "{}") as Partial<User>;
+  const customerName = user.fullName || user.name || "Customer";
+  const customerId = user.id || user.customerProfileId || undefined;
+  const axiosConfig = { withCredentials: true };
 
-  const axiosConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
-
-  const ResponseData = (response: any) => {
+  const responseData = (response: unknown): any => {
     if (!response) return null;
-    if (typeof response.data === 'string') {
+    const data = (response as any)?.data ?? response;
+    if (typeof data === "string") {
       try {
-        return JSON.parse(response.data);
+        return JSON.parse(data);
       } catch {
         return null;
       }
     }
-    return response.data;
+    return data;
   };
 
-  const extractData = (response: any) => {
-    if (!response) return [];
-    const parsedData = ResponseData(response);
-    if (parsedData?.status === true && parsedData?.result) {
-      if (parsedData.result?.data && Array.isArray(parsedData.result.data)) {
-        return parsedData.result.data;
-      }
-      if (Array.isArray(parsedData.result)) {
-        return parsedData.result;
-      }
+  const extractData = (response: unknown): any[] => {
+    const data = responseData(response);
+    if (!data) return [];
+    if (data?.status === true && data?.result) {
+      if (Array.isArray(data.result)) return data.result;
+      if (Array.isArray(data.result?.data)) return data.result.data;
     }
-    if (Array.isArray(parsedData)) {
-      return parsedData;
-    }
-    if (parsedData?.data && Array.isArray(parsedData.data)) {
-      return parsedData.data;
-    }
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
     return [];
   };
 
-  const formatTime = (time: string) => {
-    if (!time) return '';
-    return dayjs(time, 'HH:mm').format('h:mm A');
+  const formatTime = (time: string | null | undefined) => {
+    if (!time) return "";
+    const value = time.length > 5 ? time.substring(0, 5) : time;
+    return dayjs(`2000-01-01T${value}`).format("h:mm A");
   };
 
-  const { data: salonsData = [], isLoading: salonsLoading } = useQuery({
-    queryKey: ['customerSalons'],
-    enabled: !!token,
+  const { data: salonsData = [], isLoading: salonsLoading } = useQuery<Salon[]>({
+    queryKey: ["customerSalons"],
     queryFn: async () => {
       try {
         const response = await getApiUser({ page: 1, pageSize: 1000 }, axiosConfig);
-        const users = extractData(response);
-        const adminUsers = users.filter((u: any) => {
-          const role = u.role || u.Role;
-          return role === 2 || role === 3 || role === 4;
-        });
-        const salonMap = new Map();
-        adminUsers.forEach((u: any) => {
-          const salonName = u.salonName || u.SalonName;
-          if (salonName && salonName.trim() !== '') {
-            if (!salonMap.has(salonName)) {
-              salonMap.set(salonName, {
-                id: u.id || u._id,
-                name: salonName,
-                adminId: u.id || u._id,
-                address: u.salonAddress || u.SalonAddress || 'Salon Address',
-                phone: u.phoneNumber || u.PhoneNumber || '',
-                email: u.email || u.Email,
-                rating: (3 + Math.random() * 2).toFixed(1),
-                reviews: Math.floor(Math.random() * 500) + 10,
-                isActive: u.isActive !== undefined ? u.isActive : true,
-                openingTime: '09:00',
-                closingTime: '18:00',
-              });
-            }
+        const users = extractData(response) as User[];
+        const salonMap = new Map<string, Salon>();
+        users.forEach(userData => {
+          const role = userData.role;
+          const salonName = userData.salonName?.trim();
+          const id = userData.id;
+          if (role === UserRole.NUMBER_2 && salonName && id && userData.isActive !== false && !salonMap.has(salonName)) {
+            salonMap.set(salonName, { ...userData, id, salonName });
           }
         });
         return Array.from(salonMap.values());
@@ -125,28 +82,13 @@ const CustomerAppointment: React.FC = () => {
     }
   });
 
-  const { data: servicesApiData = [], isLoading: servicesLoading } = useQuery({
-    queryKey: ['customerServices', selectedSalonName],
-    enabled: !!token && !!selectedSalonName,
+  const { data: servicesApiData = [], isLoading: servicesLoading } = useQuery<AdminServices[]>({
+    queryKey: ["customerServices", selectedSalonName],
+    enabled: !!selectedSalonName,
     queryFn: async () => {
       try {
         const response = await getApiAdminServices(axiosConfig);
-        const services = extractData(response);
-        return services
-          .filter((s: any) => {
-            const isActive = s.isActive !== false;
-            const serviceSalon = s.salonName || s.SalonName;
-            return isActive && serviceSalon === selectedSalonName;
-          })
-          .map((s: any) => ({
-            id: s.id || s._id,
-            serviceName: s.serviceName || s.ServiceName || s.name || 'Service',
-            price: s.price || s.Price || 0,
-            duration: s.duration || s.Duration || 30,
-            description: s.description || s.Description || '',
-            isActive: s.isActive !== undefined ? s.isActive : true,
-            salonName: s.salonName || s.SalonName || selectedSalonName,
-          }));
+        return (extractData(response) as AdminServices[]).filter(service => service.isActive !== false && service.salonName === selectedSalonName);
       } catch (error) {
         console.error("Error fetching services:", error);
         return [];
@@ -154,28 +96,13 @@ const CustomerAppointment: React.FC = () => {
     }
   });
 
-  const { data: staffApiData = [], isLoading: staffLoading } = useQuery({
-    queryKey: ['customerStaff', selectedSalonName],
-    enabled: !!token && !!selectedSalonName,
+  const { data: staffApiData = [], isLoading: staffLoading } = useQuery<Staff[]>({
+    queryKey: ["customerStaff", selectedSalonName],
+    enabled: !!selectedSalonName,
     queryFn: async () => {
       try {
         const response = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
-        const staff = extractData(response);
-        return staff
-          .filter((s: any) => {
-            const isActive = s.isActive !== false;
-            const staffSalon = s.salonName || s.SalonName;
-            return isActive && staffSalon === selectedSalonName;
-          })
-          .map((s: any) => ({
-            id: s.id || s._id,
-            fullName: s.fullName || s.FullName || s.name || 'Staff',
-            email: s.email || s.Email || '',
-            phone: s.phone || s.Phone || s.phoneNumber || '',
-            role: s.role || s.Role || 'Employee',
-            isActive: s.isActive !== undefined ? s.isActive : true,
-            salonName: s.salonName || s.SalonName || selectedSalonName,
-          }));
+        return (extractData(response) as Staff[]).filter(staff => staff.isActive !== false && staff.salonName === selectedSalonName);
       } catch (error) {
         console.error("Error fetching staff:", error);
         return [];
@@ -183,134 +110,89 @@ const CustomerAppointment: React.FC = () => {
     }
   });
 
-  const { data: allTimeSlots = [], isLoading: timeLoading } = useQuery({
-    queryKey: ['allTimeSlots'],
-    enabled: !!token,
+  const { data: allTimeSlots = [], isLoading: timeLoading } = useQuery<TimeDto[]>({
+    queryKey: ["allTimeSlots"],
     queryFn: async () => {
       try {
         const response = await getApiTime({}, axiosConfig);
-        const slots = extractData(response);
-        if (Array.isArray(slots) && slots.length > 0) {
-          return slots.map((slot: any) => ({
-            id: slot.id || slot._id,
-            day: slot.day || slot.Day,
-            opening: slot.opening || slot.Opening || '09:00',
-            closing: slot.closing || slot.Closing || '18:00',
-            isOpen: slot.isOpen !== undefined ? slot.isOpen : (slot.IsOpen !== undefined ? slot.IsOpen : true),
-            userId: slot.userId || slot.UserId,
-          }));
-        }
-        return [];
+        return extractData(response) as TimeDto[];
       } catch (error) {
-        console.error("Error fetching all time slots:", error);
+        console.error("Error fetching timings:", error);
         return [];
       }
     }
   });
 
-  const getSalonTimings = (adminId: string) => {
-    return allTimeSlots.filter((slot: any) => slot.userId === adminId);
-  };
-
-  const getDayStatusForSalon = (adminId: string, dayName: string) => {
-    const salonSlots = getSalonTimings(adminId);
-    return salonSlots.find((t: any) => t.day === dayName) || null;
-  };
-
-  const getDayStatus = (dayName: string) => {
+  const getDayStatus = (dayName: string): TimeDto | null => {
     if (!selectedSalonAdminId) return null;
-    return getDayStatusForSalon(selectedSalonAdminId, dayName);
+    return allTimeSlots.find(slot => slot.userId === selectedSalonAdminId && slot.day === dayName) ?? null;
   };
+  const getSalonDayStatus = (adminId: string, dayName: string): TimeDto | null => {
+    return allTimeSlots.find(slot => slot.userId === adminId && slot.day === dayName) ?? null;
+  };
+  const totalDuration = useMemo(() => selectedServices.reduce((total, service) => total + Number(service.duration || 0), 0), [selectedServices]);
+  const totalPrice = useMemo(() => selectedServices.reduce((total, service) => total + Number(service.price || 0), 0), [selectedServices]);
 
-  const totalDuration = useMemo(() => {
-    return selectedServices.reduce((acc, s) => acc + (s.duration || 0), 0);
-  }, [selectedServices]);
-
-  const totalPrice = useMemo(() => {
-    return selectedServices.reduce((acc, s) => acc + (s.price || 0), 0);
-  }, [selectedServices]);
-
-  const {
-    data: slotsResponse,
-    isLoading: slotsLoading,
-    isError: slotsError,
-  } = useQuery({
-    queryKey: ['availableSlots', selectedSalonAdminId, selectedStaff?.id, selectedDate, selectedServices.map(s => s.id)],
-    queryFn: async () => {
-      if (!selectedSalonAdminId || !selectedStaff?.id || !selectedDate || selectedServices.length === 0) {
-        return null;
-      }
-      const payload = {
-        userId: selectedSalonAdminId,
-        staffId: selectedStaff.id,
-        date: selectedDate.toISOString(),
-        serviceIds: selectedServices.map(s => s.id),
-      };
-      const response = await axios.post(`${BASE_URL}/api/Slot/available-slots`, payload, axiosConfig);
-      return response.data;
-    },
+  const { data: slotsResponse, isLoading: slotsLoading, isError: slotsError } = useQuery({
+    queryKey: ["availableSlots", selectedSalonAdminId, selectedStaff?.id, selectedDate?.format("YYYY-MM-DD"), selectedServices.map(service => service.id)],
     enabled: !!selectedSalonAdminId && !!selectedStaff?.id && !!selectedDate && selectedServices.length > 0,
-    staleTime: 0,
-  });
-
-  const { data: existingBookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ['staffBookings', selectedStaff?.id, selectedDate],
-    enabled: !!selectedStaff?.id && !!selectedDate && !!token,
     queryFn: async () => {
-      if (!selectedStaff?.id || !selectedDate || !token) {
-        return [];
-      }
-      const response = await axios.get(`${BASE_URL}/api/Booking/staff/${selectedStaff.id}/date/${selectedDate.format('YYYY-MM-DD')}`, axiosConfig);
-      const data = extractData(response);
-      return data.filter((b: any) =>
-        b.status && ['pending', 'confirmed', 'inprogress'].includes(b.status.toLowerCase())
-      );
+      const payload: SlotRequestDto = {
+        userId: selectedSalonAdminId,
+        staffId: selectedStaff?.id,
+        date: selectedDate?.toISOString(),
+        serviceIds: selectedServices.map(service => service.id).filter((id): id is string => !!id)
+      };
+      const response = await postApiSlotAvailableSlots(payload, axiosConfig);
+      return responseData(response);
     },
-    staleTime: 0,
+    staleTime: 0
   });
 
-  const availableSlots: SlotDto[] = useMemo(() => {
-    if (!slotsResponse || !slotsResponse.status || !selectedDate) return [];
+  const availableSlots = useMemo<SlotDto[]>(() => {
+    if (!slotsResponse?.status || !selectedDate) return [];
+    const slots: SlotDto[] = Array.isArray(slotsResponse.slots)
+      ? slotsResponse.slots
+      : Array.isArray(slotsResponse.result?.slots)
+        ? slotsResponse.result.slots
+        : [];
     const now = dayjs();
-    const isToday = selectedDate.isSame(now, 'day');
-    const slots = slotsResponse.slots || [];
+    const isToday = selectedDate.isSame(now, "day");
 
-    const isOverlapping = (slot: SlotDto, booking: any) => {
-      const slotStart = dayjs(selectedDate.format('YYYY-MM-DD') + 'T' + slot.startTime);
-      const slotEnd = dayjs(selectedDate.format('YYYY-MM-DD') + 'T' + slot.endTime);
-      const bookStart = dayjs(booking.startTime);
-      const bookEnd = dayjs(booking.endTime);
-      const bufferEnd = bookEnd.add(15, 'minute');
-      return slotStart.isBefore(bufferEnd) && slotEnd.isAfter(bookStart);
-    };
-
-    return slots.filter((slot: SlotDto) => {
+    return slots.filter(slot => {
       if (!slot.isAvailable) return false;
       if (isToday) {
-        const slotStart = dayjs(selectedDate.format('YYYY-MM-DD') + 'T' + slot.startTime);
+        const slotStart = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${slot.startTime}`);
         if (slotStart.isBefore(now)) return false;
       }
-      const conflict = existingBookings.some((b: any) => isOverlapping(slot, b));
-      if (conflict) return false;
       return true;
     });
-  }, [slotsResponse, selectedDate, existingBookings]);
+  }, [slotsResponse, selectedDate]);
 
-  const handleSalonSelect = (salon: any) => {
+  const handleSalonSelect = (salon: Salon) => {
     setSelectedSalon(salon.id);
-    setSelectedSalonName(salon.name);
-    setSelectedSalonAdminId(salon.adminId);
+    setSelectedSalonName(salon.salonName);
+    setSelectedSalonAdminId(salon.id);
+    setSelectedServices([]);
+    setSelectedStaff(null);
+    setSelectedDate(null);
+    setSelectedSlot(null);
     setStep(0);
   };
 
   const createBookingMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: BookingDto) => {
       const response = await postApiBooking(payload, axiosConfig);
-      return extractData(response);
+      const data = responseData(response);
+      return (data?.result ?? data) as Booking;
     },
-    onSuccess: (data) => {
+    onSuccess: data => {
       setCreatedBooking(data);
       setShowConfirmation(true);
+      queryClient.invalidateQueries({ queryKey: ["customerBookings"] });
+      queryClient.invalidateQueries({ queryKey: ["availableSlots"] });
+      message.success("Booking Created Successfully");
+
       setTimeout(() => {
         setShowConfirmation(false);
         setStep(-1);
@@ -321,10 +203,8 @@ const CustomerAppointment: React.FC = () => {
         setSelectedDate(null);
         setSelectedStaff(null);
         setSelectedSlot(null);
-        queryClient.invalidateQueries({ queryKey: ['customerBookings'] });
-        queryClient.invalidateQueries({ queryKey: ['staffBookings'] });
+        setCreatedBooking(null);
       }, 4000);
-      message.success("Booking Created Successfully");
     },
     onError: (error: any) => {
       console.error("Booking error:", error);
@@ -332,53 +212,38 @@ const CustomerAppointment: React.FC = () => {
     }
   });
 
-  const disabledDate = (current: any) => {
+  const disabledDate = (current: Dayjs) => {
     if (!current) return false;
-    if (current < dayjs().startOf("day")) return true;
-    const dayName = current.format("dddd");
-    const dayInfo = getDayStatus(dayName);
-    if (!dayInfo || !dayInfo.isOpen) return true;
-    return false;
+    if (current.isBefore(dayjs().startOf("day"))) return true;
+    const dayInfo = getDayStatus(current.format("dddd"));
+    return !dayInfo || dayInfo.isOpen !== true;
   };
-
   const confirmBooking = async () => {
-    if (!selectedSlot || !selectedStaff || !selectedDate || selectedServices.length === 0) {
+    if (!selectedSlot || !selectedStaff?.id || !selectedDate || selectedServices.length === 0) {
       message.error("Please complete all steps");
       return;
     }
-    try {
-      const payload = {
-        customerId: loggedInUserId,
-        customerName: customerName,
-        staffId: selectedStaff.id,
-        serviceIds: selectedServices.map(s => s.id),
-        appointmentDate: selectedDate.toISOString(),
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
-        amount: totalPrice,
-        status: "pending",
-        salonName: selectedSalonName,
-      };
-      await createBookingMutation.mutateAsync(payload);
-    } catch (error) {
-      console.error("Booking confirmation error:", error);
-    }
+    const serviceIds = selectedServices.map(service => service.id).filter((id): id is string => !!id);
+    const payload: BookingDto = {
+      customerId,
+      customerName,
+      staffId: selectedStaff.id,
+      serviceIds,
+      appointmentDate: selectedDate.toISOString(),
+      startTime: selectedSlot.startTime,
+      endTime: selectedSlot.endTime,
+      amount: totalPrice,
+      salonName: selectedSalonName
+    };
+
+    await createBookingMutation.mutateAsync(payload);
   };
 
-  const isLoading = salonsLoading || servicesLoading || staffLoading || timeLoading || bookingsLoading;
+  const isInitialLoading = salonsLoading || timeLoading;
 
-  if (!token) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <Card className="text-center p-8">
-          <h2 className="text-xl font-bold mb-2">Please Login</h2>
-          <p className="text-gray-500">You need to be logged in to book an appointment</p>
-        </Card>
-      </div>
-    );
+  if (isInitialLoading && step === -1) {
+    return <Spin fullscreen />;
   }
-
-  if (isLoading && step === -1) return <Spin fullscreen />;
 
   if (step === -1) {
     return (
@@ -387,44 +252,50 @@ const CustomerAppointment: React.FC = () => {
           <div className="text-center mb-10">
             <h1 className="text-4xl font-bold text-gray-800 mb-3">Select Your Salon</h1>
             <p className="text-gray-600 text-lg">Choose from our premium salon partners</p>
+
             {salonsLoading ? (
-              <div className="flex justify-center py-10"><Spin size="large" /></div>
+              <div className="flex justify-center py-10">
+                <Spin size="large" />
+              </div>
             ) : (
               <Row gutter={[24, 24]}>
                 {salonsData.length === 0 ? (
                   <Col span={24}>
-                    <Card><Empty description="No salons available" /></Card>
+                    <Card>
+                      <Empty description="No salons available" />
+                    </Card>
                   </Col>
                 ) : (
-                  salonsData.map((salon: any) => {
+                  salonsData.map(salon => {
                     const dayName = dayjs().format("dddd");
-                    const dayInfo = getDayStatusForSalon(salon.adminId, dayName);
-                    const isOpen = dayInfo ? dayInfo.isOpen : false;
-                    const opening = dayInfo ? dayInfo.opening : "N/A";
-                    const closing = dayInfo ? dayInfo.closing : "N/A";
+                    const dayInfo = getSalonDayStatus(salon.id, dayName);
+                    const isOpen = dayInfo?.isOpen ?? false;
+                    const opening = dayInfo?.opening ?? "N/A";
+                    const closing = dayInfo?.closing ?? "N/A";
+
                     return (
                       <Col xs={24} sm={12} lg={8} key={salon.id}>
-                        <Card
-                          hoverable
-                          className="text-center rounded-xl shadow hover:shadow-lg transition-shadow duration-300 cursor-pointer"
-                          onClick={() => handleSalonSelect(salon)}
-                        >
+                        <Card hoverable className="text-center rounded-xl shadow hover:shadow-lg transition-shadow duration-300 cursor-pointer" onClick={() => handleSalonSelect(salon)}>
                           <div className="py-4">
                             <div className="w-16 h-16 bg-[#197278] rounded-full flex items-center justify-center mx-auto mb-3">
-                              <ShopOutlined style={{ fontSize: '1.5rem', color: 'white' }} />
+                              <ShopOutlined style={{ fontSize: "1.5rem", color: "white" }} />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-800 mb-1">{salon.name}</h3>
+
+                            <h3 className="text-xl font-bold text-gray-800 mb-1">{salon.salonName}</h3>
+
                             <div className="flex items-center justify-center gap-2 mb-2">
-                              <span className="text-gray-700">{salon.rating}</span>
-                              <span className="text-gray-400 text-sm">({salon.reviews})</span>
+                              <span className="text-gray-700">4.5</span>
+                              <span className="text-gray-400 text-sm">(0)</span>
                             </div>
+
                             <div className="text-gray-500 text-sm mb-3">
-                              <EnvironmentOutlined /> {salon.address}
+                              <EnvironmentOutlined /> {salon.salonAddress || "Salon Address"}
                             </div>
+
                             <div className="flex items-center justify-center gap-2">
                               {dayInfo ? (
                                 <>
-                                  <Tag color={isOpen ? 'green' : 'red'}>{isOpen ? 'Open Now' : 'Closed'}</Tag>
+                                  <Tag color={isOpen ? "green" : "red"}>{isOpen ? "Open Now" : "Closed"}</Tag>
                                   <span className="text-xs text-gray-400">{opening} - {closing}</span>
                                 </>
                               ) : (
@@ -460,70 +331,57 @@ const CustomerAppointment: React.FC = () => {
                   </div>
                 </div>
                 {(() => {
-                  const dayName = dayjs().format("dddd");
-                  const dayInfo = getDayStatus(dayName);
+                  const dayInfo = getDayStatus(dayjs().format("dddd"));
                   return dayInfo ? (
                     <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full">
-                      <span className={`text-xs font-semibold ${dayInfo.isOpen ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`text-xs font-semibold ${dayInfo.isOpen ? "text-green-400" : "text-red-400"}`}>
                         {dayInfo.isOpen ? "Open" : "Closed"}
                       </span>
                       <span className="text-xs text-white/80">{dayInfo.opening} - {dayInfo.closing}</span>
                     </div>
                   ) : (
-                    <div className="bg-white/20 px-3 py-1 rounded-full text-xs text-white/80">
-                      Timings not set
-                    </div>
+                    <div className="bg-white/20 px-3 py-1 rounded-full text-xs text-white/80">Timings not set</div>
                   );
                 })()}
               </div>
             </div>
           )}
-
           <Steps current={step} className="mb-6">
-            {stepsData.map((title) => (
-              <Step key={title} title={title} />
-            ))}
+            {stepsData.map(title => <Step key={title} title={title} />)}
           </Steps>
-
           <div className="min-h-[250px]">
             {step === 0 && (
               <div>
-                <h3 className="text-lg font-semibold mb-4 text-gray-700 flex items-center gap-2">
-                  Choose Services (Multiple)
-                </h3>
+                <h3 className="text-lg font-semibold mb-4 text-gray-700">Choose Services (Multiple)</h3>
                 {servicesLoading ? (
-                  <div className="flex justify-center py-8"><Spin /></div>
+                  <div className="flex justify-center py-8">
+                    <Spin />
+                  </div>
                 ) : (
                   <div className="space-y-3 max-h-[350px] overflow-y-auto">
                     {servicesApiData.length === 0 ? (
                       <Empty description="No services available" />
                     ) : (
-                      servicesApiData.map((service: any) => {
-                        const isChecked = selectedServices.some(s => s.id === service.id);
+                      servicesApiData.map(service => {
+                        const serviceId = service.id;
+                        const isChecked = !!serviceId && selectedServices.some(item => item.id === serviceId);
                         return (
                           <div
-                            key={service.id}
+                            key={serviceId || service.serviceName}
                             onClick={() => {
-                              if (isChecked) {
-                                setSelectedServices(selectedServices.filter(s => s.id !== service.id));
-                              } else {
-                                setSelectedServices([...selectedServices, service]);
-                              }
+                              if (!serviceId) return;
+                              setSelectedServices(isChecked ? selectedServices.filter(item => item.id !== serviceId) : [...selectedServices, service]);
                             }}
-                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isChecked ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
+                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isChecked ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
                           >
                             <div className="flex justify-between items-center">
                               <div>
-                                <div className="font-semibold text-gray-800">{service.serviceName}</div>
-                                <div className="text-gray-500 text-sm">{service.duration} min</div>
-                                {service.description && (
-                                  <div className="text-gray-400 text-xs">{service.description}</div>
-                                )}
+                                <div className="font-semibold text-gray-800">{service.serviceName || service.name || "Service"}</div>
+                                <div className="text-gray-500 text-sm">{service.duration || 0} min</div>
+                                {service.description && <div className="text-gray-400 text-xs">{service.description}</div>}
                               </div>
                               <div className="flex items-center gap-4">
-                                <div className={`font-bold ${isChecked ? 'text-blue-600' : 'text-gray-800'}`}>
-                                  ${service.price}
-                                </div>
+                                <div className={`font-bold ${isChecked ? "text-blue-600" : "text-gray-800"}`}>${Number(service.price || 0).toFixed(2)}</div>
                                 <Checkbox checked={isChecked} />
                               </div>
                             </div>
@@ -538,7 +396,7 @@ const CustomerAppointment: React.FC = () => {
                     <div className="flex justify-between text-sm">
                       <span>Selected: {selectedServices.length} service(s)</span>
                       <span>Total Duration: {totalDuration} min</span>
-                      <span className="font-bold">Total: ${totalPrice}</span>
+                      <span className="font-bold">Total: ${totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -552,27 +410,30 @@ const CustomerAppointment: React.FC = () => {
                   Choose a Stylist
                 </h3>
                 {staffLoading ? (
-                  <div className="flex justify-center py-8"><Spin /></div>
+                  <div className="flex justify-center py-8">
+                    <Spin />
+                  </div>
                 ) : (
                   <div className="space-y-3 max-h-[350px] overflow-y-auto">
                     {staffApiData.length === 0 ? (
                       <Empty description="No staff available" />
                     ) : (
-                      staffApiData.map((staff: any) => {
-                        const isSelected = selectedStaff?.id === staff.id;
+                      staffApiData.map(staff => {
+                        const staffId = staff.id;
+                        const isSelected = selectedStaff?.id === staffId;
                         return (
                           <div
-                            key={staff.id}
-                            onClick={() => setSelectedStaff(staff)}
-                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isSelected ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-blue-300'}`}
+                            key={staffId || staff.fullName}
+                            onClick={() => staffId && setSelectedStaff(staff)}
+                            className={`p-4 rounded-lg cursor-pointer transition-all border ${isSelected ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}
                           >
                             <div className="flex items-center gap-4">
-                              <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isSelected ? 'bg-[#197278]' : 'bg-gray-400'}`}>
-                                <span className="text-white font-bold text-xl">{staff.fullName.charAt(0).toUpperCase()}</span>
+                              <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isSelected ? "bg-[#197278]" : "bg-gray-400"}`}>
+                                <span className="text-white font-bold text-xl">{(staff.fullName || staff.name || "S").charAt(0).toUpperCase()}</span>
                               </div>
                               <div>
-                                <div className="font-semibold text-gray-800 text-lg">{staff.fullName}</div>
-                                <div className="text-gray-500 text-sm">{staff.role}</div>
+                                <div className="font-semibold text-gray-800 text-lg">{staff.fullName || staff.name || "Staff"}</div>
+                                <div className="text-gray-500 text-sm">{staff.role || "Employee"}</div>
                               </div>
                               {isSelected && <CheckCircleOutlined className="text-blue-600 text-lg ml-auto" />}
                             </div>
@@ -596,7 +457,7 @@ const CustomerAppointment: React.FC = () => {
                     <label className="text-sm font-medium text-gray-600 block mb-1">Date</label>
                     <DatePicker
                       className="w-full p-2 border rounded-lg"
-                      onChange={(date) => {
+                      onChange={date => {
                         setSelectedDate(date);
                         setSelectedSlot(null);
                       }}
@@ -607,9 +468,7 @@ const CustomerAppointment: React.FC = () => {
                       value={selectedDate}
                     />
                     {selectedDate && (
-                      <div className="mt-1 text-sm text-blue-600">
-                        {selectedDate.format("dddd, DD MMM YYYY")}
-                      </div>
+                      <div className="mt-1 text-sm text-blue-600">{selectedDate.format("dddd, DD MMM YYYY")}</div>
                     )}
                   </div>
 
@@ -627,28 +486,25 @@ const CustomerAppointment: React.FC = () => {
                         <div className="text-center py-4 text-gray-400">No available slots for the selected criteria</div>
                       ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {availableSlots.map((slot) => (
-                            <Card
-                              key={`${slot.startTime}-${slot.endTime}`}
-                              className={`cursor-pointer transition-all hover:shadow-md ${
-                                selectedSlot && selectedSlot.startTime === slot.startTime && selectedSlot.endTime === slot.endTime
-                                  ? 'border-blue-500 bg-blue-50'
-                                  : 'border-gray-200'
-                              }`}
-                              onClick={() => setSelectedSlot(slot)}
-                              size="small"
-                            >
-                              <div className="text-center">
-                                <ClockCircleOutlined className="text-blue-500 mr-1" />
-                                <span className="font-medium">{formatTime(slot.startTime)}</span>
-                                <span className="mx-1">-</span>
-                                <span className="font-medium">{formatTime(slot.endTime)}</span>
-                                {selectedSlot && selectedSlot.startTime === slot.startTime && selectedSlot.endTime === slot.endTime && (
-                                  <Tag color="blue" className="mt-1 block">Selected</Tag>
-                                )}
-                              </div>
-                            </Card>
-                          ))}
+                          {availableSlots.map(slot => {
+                            const isSelected = selectedSlot?.startTime === slot.startTime && selectedSlot?.endTime === slot.endTime;
+                            return (
+                              <Card
+                                key={`${slot.startTime}-${slot.endTime}`}
+                                className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}
+                                onClick={() => setSelectedSlot(slot)}
+                                size="small"
+                              >
+                                <div className="text-center">
+                                  <ClockCircleOutlined className="text-blue-500 mr-1" />
+                                  <span className="font-medium">{formatTime(slot.startTime)}</span>
+                                  <span className="mx-1">-</span>
+                                  <span className="font-medium">{formatTime(slot.endTime)}</span>
+                                  {isSelected && <Tag color="blue" className="mt-1 block">Selected</Tag>}
+                                </div>
+                              </Card>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -668,11 +524,11 @@ const CustomerAppointment: React.FC = () => {
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Services</span>
-                      <span className="font-medium text-gray-800">{selectedServices.map(s => s.serviceName).join(', ')}</span>
+                      <span className="font-medium text-gray-800">{selectedServices.map(service => service.serviceName || service.name || "Service").join(", ")}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Stylist</span>
-                      <span className="font-medium text-gray-800">{selectedStaff?.fullName}</span>
+                      <span className="font-medium text-gray-800">{selectedStaff?.fullName || selectedStaff?.name}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Date</span>
@@ -680,9 +536,7 @@ const CustomerAppointment: React.FC = () => {
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Time Slot</span>
-                      <span className="font-medium text-gray-800">
-                        {selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : 'Not selected'}
-                      </span>
+                      <span className="font-medium text-gray-800">{selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : "Not selected"}</span>
                     </div>
                     <div className="flex justify-between py-1 border-b border-blue-200">
                       <span className="text-gray-600">Duration</span>
@@ -690,26 +544,23 @@ const CustomerAppointment: React.FC = () => {
                     </div>
                     <div className="flex justify-between py-1">
                       <span className="font-semibold text-gray-700">Total</span>
-                      <span className="font-bold text-blue-600 text-lg">${totalPrice}</span>
+                      <span className="font-bold text-blue-600 text-lg">${totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
               </div>
             )}
           </div>
-
           <Divider className="my-4" />
           <div className="flex justify-between">
-            <Button onClick={() => setStep(step - 1)} disabled={step === 0}>
-              Back
-            </Button>
+            <Button onClick={() => setStep(step - 1)} disabled={step === 0}>Back</Button>
             {step === 3 ? (
               <Button
                 type="primary"
                 onClick={confirmBooking}
                 loading={createBookingMutation.isPending}
                 className="bg-blue-500 hover:bg-blue-600 border-none"
-                disabled={!selectedSlot || !selectedStaff || !selectedDate || selectedServices.length === 0}
+                disabled={!selectedSlot || !selectedStaff?.id || !selectedDate || selectedServices.length === 0}
               >
                 Confirm Booking
               </Button>
@@ -717,11 +568,7 @@ const CustomerAppointment: React.FC = () => {
               <Button
                 type="primary"
                 onClick={() => setStep(step + 1)}
-                disabled={
-                  (step === 0 && selectedServices.length === 0) ||
-                  (step === 1 && !selectedStaff) ||
-                  (step === 2 && (!selectedDate || !selectedSlot))
-                }
+                disabled={(step === 0 && selectedServices.length === 0) || (step === 1 && !selectedStaff?.id) || (step === 2 && (!selectedDate || !selectedSlot))}
                 className="bg-blue-500 hover:bg-blue-600 border-none"
               >
                 Next
@@ -738,6 +585,7 @@ const CustomerAppointment: React.FC = () => {
           </div>
           <h3 className="text-xl font-bold mb-1 text-gray-800">Booking Confirmed!</h3>
           <p className="text-gray-600 text-sm mb-3">Your appointment has been booked successfully.</p>
+
           {createdBooking && (
             <div className="bg-blue-50 p-3 rounded text-left text-sm border border-blue-200">
               <div className="flex justify-between py-1">
@@ -746,21 +594,22 @@ const CustomerAppointment: React.FC = () => {
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Services</span>
-                <span className="font-medium text-gray-800">{selectedServices.map(s => s.serviceName).join(', ')}</span>
+                <span className="font-medium text-gray-800">{selectedServices.map(service => service.serviceName || service.name || "Service").join(", ")}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Staff</span>
-                <span className="font-medium text-gray-800">{createdBooking.staffName || selectedStaff?.fullName}</span>
+                <span className="font-medium text-gray-800">{createdBooking.fullName || selectedStaff?.fullName || selectedStaff?.name}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Date & Time</span>
                 <span className="font-medium text-gray-800">
-                  {selectedDate?.format("DD MMM YYYY")} {selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : ''}
+                  {selectedDate?.format("DD MMM YYYY")} {selectedSlot ? `${formatTime(selectedSlot.startTime)} - ${formatTime(selectedSlot.endTime)}` : ""}
                 </span>
               </div>
+
               <div className="flex justify-between py-1">
                 <span className="text-gray-500">Total</span>
-                <span className="font-bold text-blue-600">${createdBooking.amount || totalPrice}</span>
+                <span className="font-bold text-blue-600">${Number(createdBooking.amount ?? totalPrice).toFixed(2)}</span>
               </div>
             </div>
           )}

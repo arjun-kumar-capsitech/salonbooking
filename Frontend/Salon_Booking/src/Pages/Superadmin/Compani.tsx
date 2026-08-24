@@ -1,189 +1,174 @@
+import { Card, Button, Form, message, Spin } from "antd";
+import { PlusOutlined, ShopOutlined, UserOutlined, EnvironmentOutlined, LockOutlined, MailOutlined, PhoneOutlined } from "@ant-design/icons";
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Button, Input, message, Modal, Card, Form, Spin } from "antd";
-import { SearchOutlined, PlusOutlined, ShopOutlined, UserOutlined, EnvironmentOutlined, LockOutlined, MailOutlined, PhoneOutlined } from "@ant-design/icons";
-import { useDispatch } from "react-redux";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useDispatch } from "react-redux";
 import { showSuperAdminCompani } from "../../Redux/Store/Slice/columnsSlice";
-import Modals from "../../Components/Ui/Modals";
-import { InputField, SelectField } from "../../Components/Ui/Forms";
 import { DataTable } from "../../Components/Ui/Table";
-import { getSalonBookingAPI } from '../../api/generated';
-import { useSearch } from '../../utils/FilterData';
+import { InputField, SelectField } from "../../Components/Ui/Forms";
+import ModalForm from "../../Components/Ui/Modals";
+import SearchInput from "../../Components/Ui/SearchInput";
+import FormError, { validateField } from "../../Components/Ui/FormError";
+import { getSalonBookingAPI, type User } from "../../api/generated";
+import { useSearch } from "../../utils/FilterData";
+import type { CompanyFormValues, CompanyListResult, CompanyRow, FieldErrors,  } from "../../Types/Alltypes";
 
-const {  getApiUser,  putApiUserId,  postApiUserRegisterAdmin, deleteApiUserId } = getSalonBookingAPI();
-const { confirm } = Modal;
+const { getApiUser, putApiUserId, postApiUserRegisterAdmin, deleteApiUserId } = getSalonBookingAPI();
+
 const Compani = () => {
   const dispatch = useDispatch();
-  const [form] = Form.useForm();
+  const queryClient = useQueryClient();
+  const [form] = Form.useForm<CompanyFormValues>();
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedAdmin, setSelectedAdmin] = useState<any>(null);
+  const [selectedAdmin, setSelectedAdmin] = useState<CompanyRow | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({ name: "", email: "", password: "" });
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
-  const axiosConfig = {
-    headers: { Authorization: `Bearer ${token}` }
-  };
-
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
-      try {
-        return JSON.parse(response.data);
-      } catch {
-        return null;
-      }
-    }
-    return response.data;
-  };
+  const axiosConfig = { withCredentials: true };
 
   useEffect(() => {
     dispatch(showSuperAdminCompani());
   }, [dispatch]);
 
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
-    queryKey: ['superAdminCompanies'],
+  const parseResponse = <T,>(data: unknown): T | null => {
+    if (!data) return null;
+    if (typeof data === "string") {
+      try {
+        return JSON.parse(data) as T;
+      } catch {
+        return null;
+      }
+    }
+    return data as T;
+  };
+
+  const resetModal = () => {
+    setModalVisible(false);
+    setSelectedAdmin(null);
+    setSubmitted(false);
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
+  };
+
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isFetching } =
+   useInfiniteQuery<CompanyListResult>({
+    queryKey: ["superAdminCompanies"],
     initialPageParam: 1,
-    queryFn: async ({ pageParam = 1 }) => {
-      const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
-      const parsedData = ResponseData(response);
+    queryFn: async ({ pageParam }) => {
+      try {
+        const response = await getApiUser({ page: Number(pageParam), pageSize: 4 }, axiosConfig);
+        const parsedData = parseResponse<{
+          status?: boolean;
+          result?: {
+            data?: User[] | null;
+            totalCount?: number;
+            hasNextPage?: boolean;
+          };
+        }>(response.data);
 
-      if (!parsedData?.status || !parsedData?.result) {
+        if (!parsedData?.status || !parsedData.result) {
+          return { data: [], totalCount: 0, hasNextPage: false, nextPage: Number(pageParam) + 1 };
+        }
+
+        const admins = (parsedData.result.data ?? []).filter((user) => Number(user.role) === 2);
+
+        const companies: CompanyRow[] = admins.map((user, index) => ({
+          key: String(user.id ?? `${pageParam}-${index}`),
+          id: String(user.id ?? ""),
+          salonName: user.salonName ?? "N/A",
+          owner: user.fullName ?? user.name ?? "N/A",
+          email: user.email ?? "N/A",
+          phone: user.phoneNumber ?? "N/A",
+          status: user.isActive ? "active" : "inactive",
+          salonAddress: user.salonAddress ?? "N/A",
+        }));
+
         return {
-          data: [],
-          totalCount: 0,
-          hasNextPage: false,
-          nextPage: pageParam + 1
+          data: companies,
+          totalCount: parsedData.result.totalCount ?? companies.length,
+          hasNextPage: parsedData.result.hasNextPage ?? false,
+          nextPage: Number(pageParam) + 1,
         };
+      } catch {
+        return { data: [], totalCount: 0, hasNextPage: false, nextPage: Number(pageParam) + 1 };
       }
-
-      let rawUsers = [];
-      let pagination = null;
-      const result = parsedData.result;
-
-      if (Array.isArray(result)) {
-        rawUsers = result;
-        pagination = parsedData.pagination || null;
-      } else if (result?.data && Array.isArray(result.data)) {
-        rawUsers = result.data;
-        pagination = result.pagination || parsedData.pagination || null;
-      } else {
-        rawUsers = [];
-      }
-
-      const adminUsers = rawUsers.filter((u: any) => {
-        const role = u.role || u.Role;
-        return role === 2;
-      });
-
-      const transformedCompanies = adminUsers.map((u: any, index: number) => ({
-        key: u.id || u._id || `${pageParam}-${index}`,
-        id: u.id || u._id,
-        companyName: u.salonName || u.SalonName || 'N/A',
-        owner: u.fullName || u.FullName || 'N/A',
-        email: u.email || u.Email || 'N/A',
-        phone: u.phoneNumber || u.PhoneNumber || 'N/A',
-        status: u.isActive ? "active" : "inactive",
-        salonAddress: u.salonAddress || u.SalonAddress || 'N/A',
-      }));
-
-      const totalCount = adminUsers.length;
-      const hasNext = pagination?.hasNextPage || false;
-
-      return {
-        data: transformedCompanies,
-        totalCount: totalCount,
-        hasNextPage: hasNext,
-        nextPage: pageParam + 1,
-      };
     },
     getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
   });
 
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
+
+    observerRef.current?.disconnect();
+
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
       }
+    }, { threshold: 0.1 });
+
+    if (loadMoreRef.current) observerRef.current.observe(loadMoreRef.current);
+
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const allCompanies = useMemo(() => {
-    return infiniteData?.pages?.flatMap(page => page.data) || [];
-  }, [infiniteData]);
-  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
-    allCompanies,
-    ['companyName', 'owner', 'email', 'phone'],
-    500
-  );
+  const allCompanies = useMemo<CompanyRow[]>(() => infiniteData?.pages.flatMap((page) => page.data) ?? [], [infiniteData]);
 
-  const filteredCompanies = useMemo(() => {
-    return searchFilteredData || [];
-  }, [searchFilteredData]);
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch<CompanyRow>
+  (allCompanies, ["salonName", "owner", "email", "phone"], 500);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
+  const filteredCompanies = useMemo(() => searchFilteredData ?? [], [searchFilteredData]);
+  const totalCount = infiniteData?.pages[0]?.totalCount ?? 0;
 
   const createCompanyMutation = useMutation({
-    mutationFn: async (values: any) => {
-      return await postApiUserRegisterAdmin({
-        fullName: values.owner,
-        email: values.email,
-        phoneNumber: values.phone,
-        salonName: values.companyName,
-        salonAddress: values.salonAddress,
+    mutationFn: async (values: CompanyFormValues) => {
+      const response = await postApiUserRegisterAdmin({
+        fullName: values.owner.trim(),
+        email: values.email.trim(),
+        phoneNumber: values.phone.trim(),
+        salonName: values.salonName.trim(),
+        salonAddress: values.salonAddress.trim(),
         password: values.password,
         confirmPassword: values.confirmPassword,
       }, axiosConfig);
+      return response;
     },
     onSuccess: () => {
       message.success("Company added successfully");
-      queryClient.invalidateQueries({ queryKey: ['superAdminCompanies'] });
-      setModalVisible(false);
-      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["superAdminCompanies"] });
+      resetModal();
     },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || "Operation failed");
-    }
+    onError: (error: unknown) => {
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      message.error(axiosError.response?.data?.message ?? "Failed to add company");
+    },
   });
 
   const updateCompanyMutation = useMutation({
-    mutationFn: async ({ id, values }: { id: string; values: any }) => {
-      return await putApiUserId(id, {
-        fullName: values.owner,
-        email: values.email,
-        phoneNumber: values.phone,
-        salonName: values.companyName,
-        salonAddress: values.salonAddress,
+    mutationFn: async ({ id, values }: { id: string; values: CompanyFormValues }) => {
+      return putApiUserId(id, {
+        fullName: values.owner.trim(),
+        email: values.email.trim(),
+        phoneNumber: values.phone.trim(),
+        salonName: values.salonName.trim(),
+        salonAddress: values.salonAddress.trim(),
         role: 2,
         isActive: values.status === "active",
       }, axiosConfig);
     },
     onSuccess: () => {
       message.success("Company updated successfully");
-      queryClient.invalidateQueries({ queryKey: ['superAdminCompanies'] });
-      setModalVisible(false);
-      setSelectedAdmin(null);
-      form.resetFields();
+      queryClient.invalidateQueries({ queryKey: ["superAdminCompanies"] });
+      resetModal();
     },
-    onError: (error: any) => {
-      message.error(error.response?.data?.message || "Operation failed");
-    }
+    onError: (error: unknown) => {
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      message.error(axiosError.response?.data?.message ?? "Failed to update company");
+    },
   });
 
   const deleteCompanyMutation = useMutation({
@@ -192,123 +177,99 @@ const Compani = () => {
     },
     onSuccess: () => {
       message.success("Company deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ['superAdminCompanies'] });
+      queryClient.invalidateQueries({ queryKey: ["superAdminCompanies"] });
     },
-    onError: () => {
-      message.error("Failed to delete company");
-    }
+    onError: (error: unknown) => {
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      message.error(axiosError.response?.data?.message ?? "Failed to delete company");
+    },
   });
 
-  const handleFormSubmit = (values: any) => {
-    if (selectedAdmin) {
+  const handleFormSubmit = (values: CompanyFormValues) => {
+    setSubmitted(true);
+
+    const errors: FieldErrors = {
+      name: validateField("name", values.owner),
+      email: validateField("email", values.email),
+      password: validateField("password", values.password, Boolean(selectedAdmin)),
+    };
+
+    setFieldErrors(errors);
+
+    if (Object.values(errors).some(Boolean)) return;
+
+    if (!selectedAdmin && values.confirmPassword !== values.password) {
+      message.error("Passwords do not match");
+      return;
+    }
+
+    if (selectedAdmin?.id) {
       updateCompanyMutation.mutate({ id: selectedAdmin.id, values });
-    } else {
-      createCompanyMutation.mutate(values);
+      return;
     }
+
+    createCompanyMutation.mutate(values);
   };
 
-  const handleDelete = (record: any) => {
-    confirm({
-      title: "Delete Company",
-      content: `Are you sure you want to delete ${record.owner}?`,
-      onOk() {
-        deleteCompanyMutation.mutate(record.id);
-      },
+  const handleAdd = () => {
+    setSelectedAdmin(null);
+    setSubmitted(false);
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
+    form.setFieldsValue({ status: "active" });
+    setModalVisible(true);
+  };
+
+  const handleEdit = (record: CompanyRow) => {
+    setSelectedAdmin(record);
+    setSubmitted(false);
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
+    form.setFieldsValue({
+      salonName: record.salonName,
+      owner: record.owner,
+      email: record.email,
+      phone: record.phone,
+      salonAddress: record.salonAddress,
+      status: record.status,
     });
+    setModalVisible(true);
   };
 
-  const getStatusStyle = (status: string) => ({
-    color: status === "active" ? "#52c41a" : "#ff4d4f",
-    fontWeight: 500,
-  });
+  const handleDelete = (record: CompanyRow) => {
+    if (!record.id) return;
+    deleteCompanyMutation.mutate(record.id);
+  };
 
-  const columns = [
-    {
-      title: "Company Name",
-      dataIndex: "companyName",
-      render: (text: string, record: any) => (
-        <div>
-          <div className="font-medium">{text}</div>
-          <div className="text-gray-500 text-sm">Owner: {record.owner}</div>
-        </div>
-      ),
-    },
-    { title: "Email", dataIndex: "email" },
-    { title: "Phone", dataIndex: "phone" },
-    {
-      title: "Status",
-      dataIndex: "status",
-      render: (status: string) => <span style={getStatusStyle(status)}>{status === "active" ? "Active" : "Inactive"}</span>,
-    },
-  ];
-
-  const isLoading = (loading && !infiniteData) || createCompanyMutation.isPending || updateCompanyMutation.isPending;
+  const loading = isLoading || createCompanyMutation.isPending || updateCompanyMutation.isPending;
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>Companies Management</h1>
-          <p className="text-gray-600"  style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage all salon companies</p>
-          {totalCount > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Showing {filteredCompanies.length} of {totalCount} companies
-            </p>
-          )}
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "PT Serif, serif" }}>Companies Management</h1>
+          <p className="text-gray-600" style={{ fontFamily: "Public Sans, sans-serif" }}>Manage all salon companies</p>
+          {totalCount > 0 && <p className="text-sm text-gray-500 mt-1">Showing {filteredCompanies.length} of {totalCount} companies</p>}
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setSelectedAdmin(null);
-            form.resetFields();
-            setModalVisible(true);
-          }}
-        >
-          Add Company
-        </Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>Add Company</Button>
       </div>
 
       <Card className="mb-6">
-        <div className="flex gap-4">
-          <Input
-            placeholder="Search company by name, owner, email or phone"
-            prefix={<SearchOutlined />}
-            style={{ width: 400 }}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            allowClear
-          />
-        </div>
+        <SearchInput searchText={searchText} onSearchChange={setSearchText} 
+        placeholder="Search company, owner, email or phone..." width={400} />
       </Card>
 
       <Card>
         <div className="mb-4 flex justify-between items-center">
-          <div className="p-2 font-medium">
-            All Companies Data
-            {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
+          <div className="p-2 flex items-center gap-2">
+            <span>All Companies Data</span>
+            {isFetching && !isFetchingNextPage && <Spin size="small" />}
           </div>
         </div>
-        <DataTable
-          data={filteredCompanies}
-          columns={columns}
-          loading={isLoading}
-          onEdit={(record: any) => {
-            setSelectedAdmin(record);
-            form.setFieldsValue({
-              companyName: record.companyName,
-              owner: record.owner,
-              email: record.email,
-              phone: record.phone,
-              salonAddress: record.salonAddress,
-              status: record.status,
-            });
-            setModalVisible(true);
-          }}
-          onDelete={handleDelete}
-          showActions={true}
-          rowKey="key"
-        />
+
+        <DataTable data={filteredCompanies} tableType="companies" loading={loading} 
+        onEdit={handleEdit} onDelete={handleDelete} showActions rowKey="key" />
+
         <div ref={loadMoreRef} className="py-4">
           {isFetchingNextPage && (
             <div className="text-center py-4">
@@ -316,101 +277,71 @@ const Compani = () => {
               <p className="mt-2 text-gray-500">Loading more companies...</p>
             </div>
           )}
-          {!hasNextPage && filteredCompanies.length === 0 && !isLoading && (
-            <div className="text-center py-8 text-gray-500">
-              No companies found
-            </div>
+
+          {!hasNextPage && filteredCompanies.length === 0 && !loading && (
+            <div className="text-center py-8 text-gray-500">No companies found</div>
           )}
         </div>
       </Card>
 
-      <Modals
+      <ModalForm
         form={form}
         open={modalVisible}
-        onClose={() => {
-          setModalVisible(false);
-          setSelectedAdmin(null);
-          form.resetFields();
-        }}
+        onClose={resetModal}
         title={
           <div className="flex items-center gap-2">
             <ShopOutlined />
             {selectedAdmin ? "Edit Company" : "Add Company"}
           </div>
         }
+        initialValues={{ status: selectedAdmin?.status ?? "active" }}
         onSubmit={handleFormSubmit}
         submitText={selectedAdmin ? "Update Company" : "Add Company"}
         loading={createCompanyMutation.isPending || updateCompanyMutation.isPending}
         width={500}
       >
-        <InputField
-          label="Company Name"
-          name="companyName"
-          placeholder="Enter company name"
-          required={true}
-          prefix={<ShopOutlined />}
-        />
-        <InputField
-          label="Owner Name"
-          name="owner"
-          placeholder="Enter owner name"
-          required={true}
-          prefix={<UserOutlined />}
-        />
-        <InputField
-          label="Email"
-          name="email"
-          type="email"
-          placeholder="Enter email"
-          required={true}
-          prefix={<MailOutlined />}
-        />
-        <InputField
-          label="Phone"
-          name="phone"
-          placeholder="Enter phone number"
-          required={true}
-          prefix={<PhoneOutlined />}
-        />
-        <InputField
-          label="Salon Address"
-          name="salonAddress"
-          placeholder="Enter salon address"
-          required={true}
-          prefix={<EnvironmentOutlined />}
-        />
-        {selectedAdmin && (
-          <SelectField
-            label="Status"
-            name="status"
-            required={true}
-            options={[
-              { value: "active", label: "Active" },
-              { value: "inactive", label: "Inactive" }
-            ]}
-          />
-        )}
+        <div className="mb-4">
+          <InputField label="Company Name" name="salonName" placeholder="Enter company name" 
+          required prefix={<ShopOutlined />} />
+        </div>
+        <div className="mb-4">
+          <InputField label="Owner Name" name="owner" placeholder="Enter owner name" 
+          required prefix={<UserOutlined />} />
+          {submitted && <FormError message={fieldErrors.name} />}
+        </div>
+        <div className="mb-4">
+          <InputField label="Email" name="email" type="email" placeholder="Enter email" 
+          required prefix={<MailOutlined />} />
+          {submitted && <FormError message={fieldErrors.email} />}
+        </div>
+        <div className="mb-4">
+          <InputField label="Phone" name="phone" placeholder="Enter phone number" 
+          required prefix={<PhoneOutlined />} />
+        </div>
+        <div className="mb-4">
+          <InputField label="Salon Address" name="salonAddress" placeholder="Enter salon address"
+           required prefix={<EnvironmentOutlined />} />
+        </div>
+
         {!selectedAdmin && (
           <>
-            <InputField
-              label="Password"
-              name="password"
-              type="password"
-              placeholder="Enter password"
-              required={true}
-              prefix={<LockOutlined />}
-            />
-            <InputField
-              label="Confirm Password"
-              name="confirmPassword"
-              type="password"
-              placeholder="Confirm password"
-              required={true}
-              prefix={<LockOutlined />}
-            />
+            <div className="mb-4">
+              <InputField label="Password" name="password" type="password" placeholder="Enter password"
+               required prefix={<LockOutlined />} />
+              {submitted && <FormError message={fieldErrors.password} />}
+            </div>
+            <div className="mb-4">
+              <InputField label="Confirm Password" name="confirmPassword" type="password" 
+              placeholder="Confirm password" required prefix={<LockOutlined />} />
+            </div>
           </>
         )}
-      </Modals>
+
+        {selectedAdmin && (
+          <SelectField label="Status" name="status" required options={[{ value: "active", label: "Active" }, 
+            { value: "inactive", label: "Inactive" }]} />
+        )}
+      </ModalForm>
     </div>
   );
 };

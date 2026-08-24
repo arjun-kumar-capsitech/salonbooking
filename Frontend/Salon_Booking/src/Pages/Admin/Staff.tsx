@@ -1,159 +1,123 @@
-import { Card, Button, Input, Select, Form, message, Spin } from 'antd';
-import { PlusOutlined, SearchOutlined, MailOutlined } from '@ant-design/icons';
-import { Scissors } from 'lucide-react';
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DataTable, StatusBadge } from '../../Components/Ui/Table';
-import { InputField, SelectField } from '../../Components/Ui/Forms';
-import ModalForm from '../../Components/Ui/Modals';
-import dayjs from "dayjs";
-import { getSalonBookingAPI } from '../../api/generated';
-import { useSearch } from '../../utils/FilterData';
-
+import { Card, Button, Form, message, Spin } from "antd";
+import { PlusOutlined, MailOutlined } from "@ant-design/icons";
+import { Scissors } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DataTable } from "../../Components/Ui/Table";
+import { InputField, SelectField } from "../../Components/Ui/Forms";
+import ModalForm from "../../Components/Ui/Modals";
+import SearchInput from "../../Components/Ui/SearchInput";
+import { getSalonBookingAPI, type Staff, type StaffDto, type StaffApiResponse, type StaffPaginationDtoApiResponse } from "../../api/generated";
+import { useSearch } from "../../utils/FilterData";
+import FormError, { validateField } from "../../Components/Ui/FormError";
+import type { StaffFormValues, FieldErrors, StaffRow, StaffListResult } from "../../Types/Alltypes";
 const { getApiStaff, postApiStaff, putApiStaffId, deleteApiStaffId, postApiUserRegisterEmployee } = getSalonBookingAPI();
-const { Option } = Select;
 
-const Staff = () => {
+const StaffManagement = () => {
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingStaff, setEditingStaff] = useState<any>(null);
-  const [form] = Form.useForm();
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [editingStaff, setEditingStaff] = useState<StaffRow | null>(null);
+  const [form] = Form.useForm<StaffFormValues>();
+  const [statusFilter, setStatusFilter] = useState("all");
   const [submitted, setSubmitted] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState({ name: '', email: '', password: '' });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({ name: "", email: "", password: "" });
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
   const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const userRole = user?.Role || user?.role;
-  const userSalonName = user?.SalonName || user?.salonName;
-  const isAdmin = userRole === "Admin" || userRole === 1 || userRole === 2;
-  const isSuperAdmin = userRole === "SuperAdmin";
+  const userRole = user?.Role ?? user?.role;
+  const userSalonName = user?.SalonName ?? user?.salonName;
+  const isSuperAdmin = userRole === "SuperAdmin" || userRole === 1;
+  const isAdmin = userRole === "Admin" || userRole === 2;
   const isCustomer = userRole === "Customer" || userRole === 4;
+  const axiosConfig = { withCredentials: true };
 
-  const axiosConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
+  const parseResponse = <T,>(data: unknown): T | null => {
+    if (!data) return null;
+    if (typeof data === "string") {
       try {
-        return JSON.parse(response.data);
+        return JSON.parse(data) as T;
       } catch {
         return null;
       }
     }
-    return response.data;
-  };
-
-  const validateField = (name: string, value: string, isEdit: boolean = false) => {
-    switch (name) {
-      case "name":
-        if (!value.trim()) return "Full name is required";
-        if (value.trim().length < 2) return "Name must be at least 2 characters";
-        if (value.trim().length > 50) return "Name must be less than 50 characters";
-        return "";
-      case "email":
-        if (!value.trim()) return "Email is required";
-        if (!value.includes("@") || !value.includes(".")) return "Email must contain '@' and '.'";
-        if (!/^[^\s@]+@([^\s@]+\.)+[^\s@]+$/.test(value)) return "Please enter a valid email address";
-        return "";
-      case "password":
-        if (!isEdit && !value) return "Password is required";
-        if (value && value.length < 6) return "Password must be at least 6 characters";
-        return "";
-      default:
-        return "";
-    }
+    return data as T;
   };
 
   const resetModal = () => {
     setModalVisible(false);
     setEditingStaff(null);
-    form.resetFields();
     setSubmitted(false);
-    setFieldErrors({ name: '', email: '', password: '' });
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
   };
 
-  // ✅ FIXED infinite query with correct pagination fields
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: loading, isFetching } = useInfiniteQuery({
-    queryKey: ['staff', statusFilter],
-    initialPageParam: 1,
-    queryFn: async ({ pageParam = 1 }) => {
-      try {
-        const response = await getApiStaff(
-          { page: pageParam, pageSize: 4 },
-          axiosConfig
-        );
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isFetching, }
+    = useInfiniteQuery<StaffListResult>({
+      queryKey: ["staff"],
+      initialPageParam: 1,
+      queryFn: async ({ pageParam }) => {
+        try {
+          const response = await getApiStaff({ page: pageParam as number, pageSize: 4 }, axiosConfig);
+          const parsedData = parseResponse<StaffPaginationDtoApiResponse>(response.data);
+          if (!parsedData?.status || !parsedData.result) {
+            return {
+              data: [],
+              totalCount: 0,
+              hasNextPage: false,
+              nextPage: (pageParam as number) + 1,
+            };
+          }
 
-        const parsedData = ResponseData(response);
-        if (!parsedData || parsedData.status !== true || !parsedData.result?.data) {
+          const result = parsedData.result;
+          const rawStaff: Staff[] = result.data ?? [];
+          const totalCount = result.totalCount ?? 0;
+          const backendHasNextPage = result.hasNextPage ?? false;
+
+          let filteredRawStaff = rawStaff;
+          if (isCustomer) {
+            filteredRawStaff = [];
+          }
+          if (isAdmin && !isSuperAdmin && userSalonName) {
+            filteredRawStaff = filteredRawStaff.filter((staff: Staff) => {
+              return staff.salonName === userSalonName;
+            });
+          }
+          const transformedStaff: StaffRow[] = filteredRawStaff.map((staff: Staff, index: number) => ({
+            key: String(staff.id ?? `${pageParam}-${index}`),
+            id: staff.id ?? undefined,
+            name: staff.name ?? "Unknown",
+            email: staff.email ?? "No Email",
+            role: staff.role ?? "Employee",
+            status: staff.isActive ? "active" : "inactive",
+            joined: staff.joinedDate ?? new Date().toISOString(),
+            salonName: staff.salonName ?? "Unknown",
+          }));
+          return {
+            data: transformedStaff,
+            totalCount,
+            hasNextPage: backendHasNextPage,
+            nextPage: (pageParam as number) + 1,
+          };
+        } catch {
           return {
             data: [],
             totalCount: 0,
             hasNextPage: false,
-            nextPage: pageParam + 1,
+            nextPage: (pageParam as number) + 1,
           };
         }
+      },
+      getNextPageParam: (lastPage) => {
+        return lastPage.hasNextPage ? lastPage.nextPage : undefined;
+      },
+    });
 
-        let rawStaff = parsedData.result.data;
-        // ✅ Directly read from result (not result.pagination)
-        const totalCount = parsedData.result.totalCount || 0;
-        const hasNext = parsedData.result.hasNextPage || false;
-
-        if (isCustomer) {
-          rawStaff = [];
-        } else if (isAdmin && !isSuperAdmin && userSalonName) {
-          rawStaff = rawStaff.filter((s: any) =>
-            (s.salonName || s.SalonName) === userSalonName
-          );
-        }
-
-        const transformedStaff = rawStaff.map((s: any, index: number) => ({
-          key: s.id || s._id || `${pageParam}-${index}`,
-          id: s.id || s._id,
-          name: s.name || s.Name || s.fullName || s.FullName || 'Unknown',
-          email: s.email || s.Email || 'No Email',
-          role: s.role || s.Role || 'Employee',
-          status: (s.isActive !== undefined ? s.isActive : s.IsActive) ? 'active' : 'inactive',
-          joined: s.joinedDate || s.JoinedDate || s.createdAt || s.CreatedAt || new Date().toISOString(),
-          salonName: s.salonName || s.SalonName || 'Unknown'
-        }));
-
-        return {
-          data: transformedStaff,
-          totalCount: totalCount,     // ✅ from result.totalCount
-          hasNextPage: hasNext,       // ✅ from result.hasNextPage
-          nextPage: pageParam + 1,
-        };
-      } catch (error) {
-        console.error('Error fetching staff:', error);
-        return {
-          data: [],
-          totalCount: 0,
-          hasNextPage: false,
-          nextPage: pageParam + 1,
-        };
-      }
-    },
-    getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
-  });
-
-  // Intersection Observer for infinite scroll
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-
+    observerRef.current?.disconnect();
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
           fetchNextPage();
         }
       },
@@ -163,79 +127,98 @@ const Staff = () => {
     if (loadMoreRef.current) {
       observerRef.current.observe(loadMoreRef.current);
     }
-
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
-      }
+      observerRef.current?.disconnect();
+      observerRef.current = null;
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const allStaff = useMemo(() => {
-    return infiniteData?.pages?.flatMap(page => page.data) || [];
+  const allStaff = useMemo<StaffRow[]>(() => {
+    return infiniteData?.pages.flatMap((page) => page.data) ?? [];
   }, [infiniteData]);
 
-  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
-    allStaff,
-    ['name', 'email'],
-    500
-  );
+  const { searchText, setSearchText, filteredData: searchFilteredData }
+   = useSearch<StaffRow>(allStaff, ["name", "email"], 500);
 
   const filteredStaff = useMemo(() => {
-    let result = searchFilteredData || [];
-    if (statusFilter !== 'all') {
-      result = result.filter((s: any) => s.status === statusFilter);
+    const result = searchFilteredData ?? [];
+    if (statusFilter === "all") {
+      return result;
     }
-    return result;
+    return result.filter((staff) => staff.status === statusFilter);
   }, [searchFilteredData, statusFilter]);
 
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
-
   const addStaffMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: StaffDto) => {
       const staffResponse = await postApiStaff(payload, axiosConfig);
-      const parsedData = ResponseData(staffResponse);
-      const createdStaff = parsedData?.result || parsedData;
-      const staffId = createdStaff?.id || createdStaff?._id;
+      const parsedData = parseResponse<StaffApiResponse>(staffResponse.data);
+      const result = parsedData?.result;
+      const staffId = result?.id ?? undefined;
       if (staffId) {
-        await postApiUserRegisterEmployee({ staffId });
+        await postApiUserRegisterEmployee({ staffId }, axiosConfig);
       }
       return { success: true, staffId };
     },
     onSuccess: () => {
-      message.success('Staff added successfully');
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      message.success("Staff added successfully");
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
       resetModal();
     },
-    onError: (error: any) => {
-      const backendMessage = error?.response?.data?.message || '';
-      if (backendMessage.toLowerCase().includes('exist') || backendMessage.toLowerCase().includes('already')) {
-        setFieldErrors(prev => ({ ...prev, email: 'Email already exists' }));
-        message.error('Email already exists! Please use a different email.');
-      } else {
-        message.error(backendMessage || 'Something went wrong');
+    onError: (error: unknown) => {
+      const axiosError = error as {
+        response?: {
+          data?: {
+            message?: string;
+          };
+        };
+      };
+
+      const backendMessage = axiosError.response?.data?.message ?? "";
+      const normalizedMessage = backendMessage.toLowerCase();
+
+      if (normalizedMessage.includes("exist") || normalizedMessage.includes("already")) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "Email already exists",
+        }));
+        setSubmitted(true);
+        message.error("Email already exists! Please use a different email.");
+        return;
       }
+      message.error(backendMessage || "Something went wrong");
     },
   });
 
   const updateStaffMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
+    mutationFn: async ({ id, payload }: { id: string; payload: StaffDto }) => {
       await putApiStaffId(id, payload, axiosConfig);
     },
     onSuccess: () => {
-      message.success('Staff updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      message.success("Staff updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
       resetModal();
     },
-    onError: (error: any) => {
-      const backendMessage = error?.response?.data?.message || '';
-      if (backendMessage.toLowerCase().includes('exist') || backendMessage.toLowerCase().includes('already')) {
-        setFieldErrors(prev => ({ ...prev, email: 'Email already exists' }));
-        message.error('Email already exists! Please use a different email.');
-      } else {
-        message.error(backendMessage || 'Failed to update staff');
+    onError: (error: unknown) => {
+      const axiosError = error as {
+        response?: {
+          data?: {
+            message?: string;
+          };
+        };
+      };
+
+      const backendMessage = axiosError.response?.data?.message ?? "";
+      const normalizedMessage = backendMessage.toLowerCase();
+      if (normalizedMessage.includes("exist") || normalizedMessage.includes("already")) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "Email already exists",
+        }));
+        setSubmitted(true);
+        message.error("Email already exists! Please use a different email.");
+        return;
       }
+      message.error(backendMessage || "Failed to update staff");
     },
   });
 
@@ -244,241 +227,176 @@ const Staff = () => {
       await deleteApiStaffId(id, axiosConfig);
     },
     onSuccess: () => {
-      message.success('Staff deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      message.success("Staff deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
     },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.message || 'Failed to delete staff');
+    onError: (error: unknown) => {
+      const axiosError = error as {
+        response?: {
+          data?: {
+            message?: string;
+          };
+        };
+      };
+      message.error(axiosError.response?.data?.message || "Failed to delete staff");
     },
   });
 
-  const getFieldError = (field: string) => {
-    return submitted ? fieldErrors[field as keyof typeof fieldErrors] : "";
-  };
-
-  const handleFormSubmit = (values: any) => {
+  const handleFormSubmit = (values: StaffFormValues) => {
     setSubmitted(true);
+    const isEdit = Boolean(editingStaff);
+    const errors: FieldErrors = {
+      name: validateField("name", values.name),
+      email: validateField("email", values.email),
+      password: validateField("password", values.Password, isEdit),
+    };
+    setFieldErrors(errors);
 
-    const isEdit = !!editingStaff;
-    const nameError = validateField("name", values.name, isEdit);
-    const emailError = validateField("email", values.email, isEdit);
-    const passwordError = validateField("password", values.Password, isEdit);
-    setFieldErrors({ name: nameError, email: emailError, password: passwordError });
-    if (nameError || emailError || passwordError) {
+    if (Object.values(errors).some(Boolean)) {
       return;
     }
 
-    const payload = {
-      name: values.name,
-      password: values.Password,
-      email: values.email,
-      role: values.role || 'Employee',
-      isActive: values.status === 'active',
-      joinedDate: new Date().toISOString(),
-      salonName: userSalonName
+    const payload: StaffDto = {
+      name: values.name.trim(),
+      email: values.email.trim(),
+      password: values.Password || undefined,
+      role: values.role || "Employee",
+      isActive: values.status === "active",
+      salonName: userSalonName,
     };
 
-    if (editingStaff) {
-      updateStaffMutation.mutate({ id: editingStaff.id, payload });
-    } else {
-      addStaffMutation.mutate(payload);
+    if (editingStaff?.id) {
+      updateStaffMutation.mutate({
+        id: editingStaff.id,
+        payload,
+      });
+      return;
     }
+    addStaffMutation.mutate(payload);
   };
 
-  const handleDelete = (record: any) => {
+  const handleAdd = () => {
+    setEditingStaff(null);
+    setSubmitted(false);
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
+    form.setFieldsValue({
+      role: "Employee",
+      status: "active",
+    });
+
+    setModalVisible(true);
+  };
+
+  const handleEdit = (record: StaffRow) => {
+    setEditingStaff(record);
+    setSubmitted(false);
+    setFieldErrors({ name: "", email: "", password: "" });
+    form.resetFields();
+    form.setFieldsValue({
+      name: record.name,
+      email: record.email,
+      role: record.role,
+      status: record.status,
+      Password: undefined,
+    });
+    setModalVisible(true);
+  };
+
+  const handleDelete = (record: StaffRow) => {
     if (isCustomer || !record.id) return;
     deleteStaffMutation.mutate(record.id);
   };
-
-  const columns = [
-    {
-      title: 'Staff Member',
-      dataIndex: 'name',
-      render: (text: string, record: any) => (
-        <div>
-          <div className="font-medium">{text}</div>
-          <div className="text-gray-500 text-sm">
-            <MailOutlined className="mr-1" /> {record.email}
-          </div>
-        </div>
-      )
-    },
-    { title: 'Role', dataIndex: 'role' },
-    ...(isAdmin || isSuperAdmin ? [{ title: 'Salon Name', dataIndex: 'salonName' }] : []),
-    {
-      title: 'Joined Date',
-      dataIndex: 'joined',
-      render: (date: any) => date ? dayjs(date).format("DD MMM YYYY") : 'N/A'
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      render: (status: string) => <StatusBadge type="user" value={status} />
-    }
-  ];
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>{isCustomer ? "Our Staff" : "Staff Management"}</h1>
-          <p className="text-gray-600" style={{ fontFamily: 'Public Sans, sans-serif' }}>{isCustomer ? "Meet our professional staff" : "Manage salon staff"}</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "PT Serif, serif" }}>
+            {isCustomer ? "Our Staff" : "Staff Management"}
+          </h1>
+          <p className="text-gray-600" style={{ fontFamily: "Public Sans, sans-serif" }}>
+            {isCustomer ? "Meet our professional staff" : "Manage salon staff"}
+          </p>
         </div>
         {!isCustomer && (
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingStaff(null);
-              form.resetFields();
-              setSubmitted(false);
-              setFieldErrors({ name: '', email: '', password: '' });
-              setModalVisible(true);
-            }}
-          >
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
             Add Staff
           </Button>
         )}
       </div>
-
       <Card className="mb-6">
-        <div className="flex gap-4">
-          <Input
-            placeholder="Search staff by name or email..."
-            prefix={<SearchOutlined />}
-            style={{ width: 300 }}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            allowClear
-          />
-          <Select
-            style={{ width: 120 }}
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value)}
-          >
-            <Option value="all">All Status</Option>
-            <Option value="active">Active</Option>
-            <Option value="inactive">Inactive</Option>
-          </Select>
-        </div>
+        <SearchInput searchText={searchText} onSearchChange={setSearchText} status={statusFilter}
+         onStatusChange={setStatusFilter} placeholder="Search staff..." width={300} />
       </Card>
-
       <Card>
         <div className="mb-4 flex justify-between items-center">
-          <p className="p-2">
-            All Staff Data
-            {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
-          </p>
+          <div className="p-2 flex items-center gap-2">
+            <span>All Staff Data</span>
+            {isFetching && !isFetchingNextPage && <Spin size="small" />}
+          </div>
         </div>
-
-        <DataTable
-          data={filteredStaff}
-          columns={columns}
-          loading={loading && !infiniteData}
-          onEdit={!isCustomer ? (record) => {
-            setEditingStaff(record);
-            form.setFieldsValue({
-              name: record.name,
-              email: record.email,
-              role: record.role,
-              status: record.status,
-            });
-            setSubmitted(false);
-            setFieldErrors({ name: '', email: '', password: '' });
-            setModalVisible(true);
-          } : undefined}
-          onDelete={!isCustomer ? handleDelete : undefined}
-          showActions={!isCustomer}
-          rowKey="key"
-        />
-
+        <DataTable data={filteredStaff} tableType="staff" loading={isLoading} onEdit={!isCustomer ? 
+        handleEdit : undefined} onDelete={!isCustomer ?  handleDelete : undefined} showActions={!isCustomer} rowKey="key" />
+        
         <div ref={loadMoreRef} className="py-4">
           {isFetchingNextPage && (
             <div className="text-center py-4">
               <Spin size="large" />
-              <p className="mt-2 text-gray-500">Loading more staff...</p>
+              <div className="mt-2 text-gray-500">
+                Loading more staff...
+              </div>
             </div>
           )}
-
-          {!hasNextPage && filteredStaff.length > 0 && (
-            <div className="text-center py-4 text-green-600">
-              ✅ All {filteredStaff.length} staff members loaded (out of {totalCount} total)
-            </div>
-          )}
-
-          {!hasNextPage && filteredStaff.length === 0 && !loading && (
+          {!hasNextPage && filteredStaff.length === 0 && !isLoading && (
             <div className="text-center py-8 text-gray-500">
               No staff members found
             </div>
           )}
         </div>
       </Card>
-
       {!isCustomer && (
         <ModalForm
           form={form}
           open={modalVisible}
           onClose={resetModal}
-          title={<div className="flex items-center gap-2"><Scissors size={20} />{editingStaff ? 'Edit Staff' : 'Add Staff'}</div>}
-          initialValues={editingStaff || { status: 'active', role: 'Employee' }}
+          title={
+            <div className="flex items-center gap-2">
+              <Scissors size={20} />
+              {editingStaff ? "Edit Staff" : "Add Staff"}
+            </div>
+          }
+          initialValues={{
+            role: editingStaff?.role ?? "Employee",
+            status: editingStaff?.status ?? "active",
+          }}
           onSubmit={handleFormSubmit}
-          submitText={editingStaff ? 'Update Staff' : 'Add Staff'}
+          submitText={editingStaff ? "Update Staff" : "Add Staff"}
           loading={addStaffMutation.isPending || updateStaffMutation.isPending}
         >
           <div className="mb-4">
-            <InputField
-              label="Full Name"
-              name="name"
-              required
-              placeholder="Enter full name"
-            />
-            {getFieldError("name") && (
-              <p className="text-red-500 text-sm mt-1">{getFieldError("name")}</p>
-            )}
+            <InputField label="Full Name" name="name" required placeholder="Enter full name" />
+            {submitted && <FormError message={fieldErrors.name} />}
           </div>
-
           <div className="mb-4">
-            <InputField
-              label="Email"
-              name="email"
-              prefix={<MailOutlined />}
-              required
-              placeholder="Enter email address"
-            />
-            {getFieldError("email") && (
-              <p className="text-red-500 text-sm mt-1">{getFieldError("email")}</p>
-            )}
+            <InputField label="Email" name="email" type="email" prefix={<MailOutlined />}
+             required placeholder="Enter email address" /> {submitted && <FormError message={fieldErrors.email} />}
           </div>
-
           <div className="mb-4">
-            <InputField
-              label="Password"
-              name="Password"
-              required={!editingStaff}
-              placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password"}
-            />
-            {getFieldError("password") && (
-              <p className="text-red-500 text-sm mt-1">{getFieldError("password")}</p>
-            )}
+            <InputField label="Password" name="Password" type="password" required={!editingStaff}
+             placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password"} /> {submitted && <FormError message={fieldErrors.password} />}
           </div>
-
           <div className="mb-4">
-            <SelectField
-              label="Role"
-              name="role"
-              required
-              options={[{ value: 'Employee', label: 'Employee' }]}
-            />
+            <SelectField label="Role" name="role" required options={[{ value: "Employee", label: "Employee" }]} />
           </div>
-
           <div className="mb-2">
             <SelectField
               label="Status"
               name="status"
               required
               options={[
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' }
+                { value: "active", label: "Active" },
+                { value: "inactive", label: "Inactive" },
               ]}
             />
           </div>
@@ -487,4 +405,4 @@ const Staff = () => {
     </div>
   );
 };
-export default Staff;
+export default StaffManagement;

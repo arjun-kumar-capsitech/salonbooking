@@ -1,35 +1,44 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
-import { Card, Row, Col, message, Modal, Button, Spin, Input, Space, Divider, Select, Tag } from "antd";
+import { Card, Row, Col, message, Modal, Spin, Input, Space, Divider, Select, Tag } from "antd";
 import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, ExclamationCircleOutlined, FileTextOutlined, DollarOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
-import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
-import { DataTable, StatusBadge } from "../../Components/Ui/Table";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { DataTable, } from "../../Components/Ui/Table";
 import { StatCard } from "../../Components/Ui/Cards";
-import { getSalonBookingAPI } from '../../api/generated';
+import { getSalonBookingAPI, type AdminServices, type Booking, type Staff, type User } from "../../api/generated";
+import type { BookingRow, CancellationReason, ReferenceData, BookingPage } from "../../Types/Alltypes";
+const api = getSalonBookingAPI();
+const apiOptions = { withCredentials: true };
 
-const { getApiBooking, getApiStaff, getApiAdminServices, getApiUser, putApiBookingId } = getSalonBookingAPI();
+const parseResponse = <T,>(data: unknown): T | null => {
+  if (typeof data !== "string") return data as T;
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return null;
+  }
+};
 
-const CustomerBookings: React.FC = () => {
-  const [selectedBooking, setSelectedBooking] = useState<any>(null);
+const CustomerBookings = () => {
+  const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [cancelReason, setCancelReason] = useState<string>("");
-  const [cancelMessage, setCancelMessage] = useState<string>("");
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelMessage, setCancelMessage] = useState("");
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const loggedInUserId = user?.id || user?._id;
-  const loggedInUserName = user?.fullName || user?.FullName || user?.name || user?.Name || 'Customer';
+  const user = useMemo<User | null>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "null") as User | null;
+    } catch {
+      return null;
+    }
+  }, []);
 
-  const axiosConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
+  const loggedInUserId = user?.id;
+  const loggedInUserName = user?.fullName ?? user?.name ?? "Customer";
 
-  const cancellationReasons = [
+  const cancellationReasons: CancellationReason[] = [
     { value: "schedule_conflict", label: "Schedule Conflict" },
     { value: "change_of_plans", label: "Change of Plans" },
     { value: "emergency", label: "Emergency" },
@@ -44,262 +53,159 @@ const CustomerBookings: React.FC = () => {
     { value: "quality_concern", label: "Quality Concern" },
     { value: "pricing", label: "Pricing Issues" },
     { value: "appointment_time", label: "Time Slot Issue" },
-    { value: "other", label: "Other Reason" }
+    { value: "other", label: "Other Reason" },
   ];
 
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
-      try {
-        return JSON.parse(response.data);
-      } catch {
-        return null;
-      }
-    }
-    return response.data;
-  };
-
-  const extractArray = (response: any) => {
-    const parsed = ResponseData(response);
-    if (!parsed) return [];
-    if (parsed?.status === true && parsed?.result) {
-      if (Array.isArray(parsed.result)) {
-        return parsed.result;
-      }
-      if (parsed.result?.data && Array.isArray(parsed.result.data)) {
-        return parsed.result.data;
-      }
-    }
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    if (parsed?.data && Array.isArray(parsed.data)) {
-      return parsed.data;
-    }
-    return [];
-  };
-
-  const { data: referenceData, isLoading: referenceLoading } = useQuery({
-    queryKey: ['customerReferenceData'],
+  const { data: referenceData, isLoading: referenceLoading } = useQuery<ReferenceData>({
+    queryKey: ["customerBookingReferenceData"],
+    enabled: Boolean(loggedInUserId),
     queryFn: async () => {
-      try {
-        let users: any[] = [];
+      const [staffResponse, serviceResponse] = await Promise.all([
+        api.getApiStaff({ page: 1, pageSize: 1000 }, apiOptions),
+        api.getApiAdminServices(apiOptions),
+      ]);
+      const staffResponseData = parseResponse<{ result?: { data?: Staff[] } }>(staffResponse.data);
+      const serviceResponseData = parseResponse<{ result?: AdminServices[] }>(serviceResponse.data);
+      const staffList = staffResponseData?.result?.data ?? [];
+      const serviceList = serviceResponseData?.result ?? [];
+      const staffMap: Record<string, Staff> = {};
+      const serviceMap: Record<string, AdminServices> = {};
+      staffList.forEach((staff) => {
+        if (staff.id) staffMap[String(staff.id)] = staff;
+      });
+      serviceList.forEach((service) => {
+        if (service.id && service.isActive !== false) serviceMap[String(service.id)] = service;
+      });
+      return { staffMap, serviceMap };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isFetching } =
+    useInfiniteQuery<BookingPage>({
+      queryKey: ["customerBookings", loggedInUserId],
+      initialPageParam: 1,
+      enabled: Boolean(loggedInUserId && referenceData),
+      queryFn: async ({ pageParam }) => {
+        const page = Number(pageParam);
         try {
-          const userRes = await getApiUser({ page: 1, pageSize: 1000 }, axiosConfig);
-          users = extractArray(userRes);
-        } catch (error) {}
+          const response = await api.getApiBooking({ page, pageSize: 10 }, apiOptions);
+          const responseData = parseResponse<{ status?: boolean; result?: { data?: Booking[]; totalCount?: number; hasNextPage?: boolean } }>(response.data);
+          const result = responseData?.result;
+          if (!result) {
+            return { data: [], totalCount: 0, hasNextPage: false, nextPage: page + 1 };
+          }
+          const rawBookings = result.data ?? [];
+          const customerBookings = rawBookings.filter((booking) => String(booking.customerId ?? "") === String(loggedInUserId));
 
-        const staffRes = await getApiStaff({ page: 1, pageSize: 1000 }, axiosConfig);
-        const staff = extractArray(staffRes);
+          const transformedBookings: BookingRow[] = customerBookings.map((booking, index) => {
+            const serviceIds = booking.serviceIds?.length
+              ? booking.serviceIds
+              : booking.serviceId
+                ? [booking.serviceId]
+                : [];
+            const serviceNames = serviceIds
+              .map((serviceId) => referenceData?.serviceMap[String(serviceId)]?.serviceName)
+              .filter(Boolean);
+            const staff = referenceData?.staffMap[String(booking.staffId ?? "")];
+            const staffName = staff?.fullName ?? staff?.name ?? "Unknown Staff";
+            const serviceName =
+              serviceNames.length > 0
+                ? serviceNames.join(", ")
+                : "Unknown Service";
+            const appointmentDate = booking.appointmentDate
+              ? dayjs(booking.appointmentDate).format("DD MMM YYYY")
+              : "Invalid Date";
+            const startTime = booking.startTime ?? "";
+            const endTime = booking.endTime ?? "";
+            const displayDateTime =
+              startTime && endTime
+                ? `${appointmentDate} - ${startTime} to ${endTime}`
+                : appointmentDate;
 
-        const serviceRes = await getApiAdminServices(axiosConfig);
-        const services = extractArray(serviceRes);
-
-        const staffMap: Record<string, string> = {};
-        const serviceMap: Record<string, string> = {};
-
-        staff.forEach((s: any) => {
-          const id = String(s.id || s._id);
-          const name = s.name || s.Name || s.fullName || s.FullName || 'Unknown Staff';
-          staffMap[id] = name;
-        });
-
-        if (users.length > 0) {
-          users.forEach((u: any) => {
-            const role = u.role || u.Role;
-            const roleStr = String(role).toLowerCase();
-            if (roleStr === '3' || roleStr === 'employee') {
-              const employeeProfileId = u.employeeProfileId || u.EmployeeProfileId;
-              if (employeeProfileId) {
-                const name = u.fullName || u.FullName || u.name || u.Name || 'Unknown Staff';
-                staffMap[String(employeeProfileId)] = name;
-              }
+            let status = String(booking.status ?? "pending").toLowerCase();
+            if (status === "complete") {
+              status = "completed";
             }
+
+            return {
+              key: String(booking.id ?? `${page}-${index}`),
+              id: String(booking.id ?? ""),
+              customerId: String(booking.customerId ?? loggedInUserId ?? ""),
+              staffId: String(booking.staffId ?? ""),
+              serviceId: String(
+                booking.serviceId ??
+                booking.serviceIds?.[0] ??
+                ""
+              ),
+              date: booking.appointmentDate
+                ? dayjs(booking.appointmentDate).format("YYYY-MM-DD")
+                : "",
+              time:
+                startTime && endTime
+                  ? `${startTime} - ${endTime}`
+                  : startTime || endTime || "",
+              customerName: booking.customerName ?? loggedInUserName,
+              salonName: booking.salonName ?? "Unknown Salon",
+              serviceName,
+              staffName,
+              appointmentDate: displayDateTime,
+              amount: Number(booking.amount ?? 0),
+              status,
+
+              originalData: booking,
+            };
           });
-        }
-
-        services.forEach((s: any) => {
-          const id = String(s.id || s._id);
-          const name = s.serviceName || s.ServiceName || s.name || s.Name || 'Unknown Service';
-          serviceMap[id] = name;
-        });
-
-        return { staffMap, serviceMap };
-      } catch (error) {
-        return { staffMap: {}, serviceMap: {} };
-      }
-    },
-  });
-
-  const {
-    data: infiniteData,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading: loading,
-    isFetching,
-  } = useInfiniteQuery({
-    queryKey: ['customerBookingsList'],
-    initialPageParam: 1,
-    enabled: !!token && !!referenceData,
-    queryFn: async ({ pageParam = 1 }) => {
-      try {
-        const res = await getApiBooking({ page: pageParam, pageSize: 10 }, axiosConfig);
-        const parsedData = ResponseData(res);
-
-        if (!parsedData?.status === true || !parsedData?.result?.data) {
-          return {
-            data: [],
-            totalCount: 0,
-            hasNextPage: false,
-            nextPage: pageParam + 1,
-          };
-        }
-
-        let rawBookings = parsedData.result.data;
-        const pagination = parsedData.result.pagination;
-
-        rawBookings = rawBookings.filter((b: any) =>
-          String(b.customerId || b.CustomerId) === String(loggedInUserId)
-        );
-
-        const transformedBookings = rawBookings.map((b: any, index: number) => {
-          // ✅ service names from serviceIds array
-          let serviceNames: string[] = [];
-          const serviceIdsArray = b.serviceIds || b.ServiceIds || [];
-          if (Array.isArray(serviceIdsArray) && serviceIdsArray.length > 0) {
-            serviceNames = serviceIdsArray.map((id: string) => {
-              const name = referenceData?.serviceMap?.[String(id)] || 'Unknown Service';
-              return name;
-            });
-          } else {
-            const singleId = String(b.serviceId || b.ServiceId || '');
-            if (singleId && referenceData?.serviceMap?.[singleId]) {
-              serviceNames = [referenceData.serviceMap[singleId]];
-            } else {
-              serviceNames = ['Unknown Service'];
-            }
-          }
-          const serviceDisplay = serviceNames.join(', ');
-
-          let dateStr = b.appointmentDate || b.AppointmentDate || '';
-          const startTime = b.startTime || b.StartTime || '';
-          const endTime = b.endTime || b.EndTime || '';
-
-          let displayDateTime = 'Invalid Date';
-          if (dateStr && startTime && endTime) {
-            const formattedDate = dayjs(dateStr).format('DD MMM YYYY');
-            displayDateTime = `${formattedDate} - ${startTime} to ${endTime}`;
-          } else if (dateStr) {
-            displayDateTime = dayjs(dateStr).format('DD MMM YYYY - hh:mm A');
-          }
-
-          let status = (b.status || b.Status || "pending").toLowerCase();
-          if (status === "complete") status = "completed";
-
-          const customerName = loggedInUserName;
-          const staffId = String(b.staffId || b.StaffId || '');
-          const staffName = referenceData?.staffMap?.[staffId] || 'Unknown Staff';
 
           return {
-            key: b.id || b._id || `${pageParam}-${index}`,
-            id: b.id || b._id || '',
-            customerName: customerName,
-            salonName: b.salonName || b.SalonName || 'Unknown',
-            serviceName: serviceDisplay,
-            staffName: staffName,
-            appointmentDate: displayDateTime,
-            amount: b.amount || b.Amount || 0,
-            status: status,
-            originalData: b,
+            data: transformedBookings,
+            totalCount: result.totalCount ?? customerBookings.length,
+            hasNextPage: result.hasNextPage ?? false,
+            nextPage: page + 1,
           };
-        });
-
-        return {
-          data: transformedBookings,
-          totalCount: pagination?.totalCount || transformedBookings.length,
-          hasNextPage: pagination?.hasNextPage || false,
-          nextPage: pageParam + 1,
-        };
-      } catch (error) {
-        return {
-          data: [],
-          totalCount: 0,
-          hasNextPage: false,
-          nextPage: pageParam + 1,
-        };
-      }
-    },
-    getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
-  });
-
-  useEffect(() => {
-    if (!hasNextPage || isFetchingNextPage) return;
-
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
+        } catch (error) {
+          console.error("Customer bookings error:", error);
+          return { data: [], totalCount: 0, hasNextPage: false, nextPage: page + 1 };
         }
       },
-      { threshold: 0.1 }
-    );
+      getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
+    });
 
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-
+  useEffect(() => {
+    if (!hasNextPage || isFetchingNextPage || !loadMoreRef.current) return;
+    observerRef.current?.disconnect();
+    observerRef.current = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    }, { threshold: 0.1 });
+    observerRef.current.observe(loadMoreRef.current);
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
-      }
+      observerRef.current?.disconnect();
+      observerRef.current = null;
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const bookings = useMemo(() => {
-    return infiniteData?.pages?.flatMap((page) => page.data) || [];
-  }, [infiniteData]);
-
-  const activeBookings = useMemo(() => {
-    return bookings.filter((b: any) => b.status !== "cancelled");
-  }, [bookings]);
-
+  const bookings = useMemo<BookingRow[]>(() => infiniteData?.pages.flatMap((page) => page.data) ?? [], [infiniteData]);
+  const activeBookings = useMemo(() => bookings.filter((booking) => !["cancelled", "completed"].includes(booking.status)), [bookings]);
+  const completedBookings = useMemo(() => bookings.filter((booking) => booking.status === "completed"), [bookings]);
+  const cancelledBookings = useMemo(() => bookings.filter((booking) => booking.status === "cancelled"), [bookings]);
+  const totalSpent = useMemo(() => bookings.filter((booking) => booking.status
+    !== "cancelled").reduce((sum, booking) => sum + Number(booking.amount || 0), 0), [bookings]);
   const cancelBookingMutation = useMutation({
-    mutationFn: async ({ id, reason, message: cancelMsg }: { id: string; reason: string; message: string }) => {
-      const payload = {
-        status: "cancelled",
-        cancellationReason: reason,
-        cancellationMessage: cancelMsg,
-        cancelledAt: new Date().toISOString(),
-      };
-      await putApiBookingId(id, payload, axiosConfig);
-    },
+    mutationFn: async (bookingId: string) => api.putApiBookingId(bookingId, { status: "cancelled" }, apiOptions),
     onSuccess: () => {
-      message.success({
-        content: "Booking cancelled successfully",
-        icon: <CheckCircleOutlined />,
-        duration: 3,
-      });
-      queryClient.invalidateQueries({ queryKey: ['customerBookingsList'] });
+      message.success({ content: "Booking cancelled successfully", icon: <CheckCircleOutlined />, duration: 3 });
+      void queryClient.invalidateQueries({ queryKey: ["customerBookings", loggedInUserId] });
       setCancelModalVisible(false);
       setSelectedBooking(null);
       setCancelReason("");
       setCancelMessage("");
     },
-    onError: (error: any) => {
-      message.error({
-        content: error?.response?.data?.message || "Failed to cancel booking",
-        duration: 3,
-      });
+    onError: (error: unknown) => {
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      message.error(axiosError.response?.data?.message ?? "Failed to cancel booking");
     },
   });
-
-  const showCancelConfirm = (record: any) => {
+  const showCancelConfirm = (record: BookingRow) => {
     if (record.status === "cancelled") {
       message.warning("This booking is already cancelled");
       return;
@@ -315,156 +221,53 @@ const CustomerBookings: React.FC = () => {
   };
 
   const handleCancelBooking = () => {
-    if (selectedBooking) {
-      if (!cancelReason) {
-        message.warning("Please select a reason for cancellation");
-        return;
-      }
-      cancelBookingMutation.mutate({
-        id: selectedBooking.id,
-        reason: cancelReason,
-        message: cancelMessage || "No additional message provided",
-      });
+    if (!selectedBooking) return;
+    if (!cancelReason) {
+      message.warning("Please select a reason for cancellation");
+      return;
     }
+    cancelBookingMutation.mutate(selectedBooking.id);
+  };
+
+  const closeCancelModal = () => {
+    setCancelModalVisible(false);
+    setSelectedBooking(null);
+    setCancelReason("");
+    setCancelMessage("");
   };
 
   const stats = useMemo(() => [
-    {
-      title: "Total Bookings",
-      value: bookings.length,
-      icon: <CalendarOutlined />,
-      color: "#da5d09",
-    },
-    {
-      title: "Active Bookings",
-      value: activeBookings.length,
-      icon: <ClockCircleOutlined />,
-      color: "#11a52a",
-    },
-    {
-      title: "Completed",
-      value: bookings.filter((b: any) => b.status === "completed").length,
-      icon: <CheckCircleOutlined />,
-      color: "#1f096e",
-    },
-    {
-      title: "Cancelled",
-      value: bookings.filter((b: any) => b.status === "cancelled").length,
-      icon: <CloseCircleOutlined />,
-      color: "#ee0a0a",
-    },
-    {
-      title: "Total Spent",
-      value: `$${bookings
-        .filter((b: any) => b.status !== "cancelled")
-        .reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0)}`,
-      icon: <DollarOutlined />,
-      color: "#a01299",
-    },
-  ], [bookings, activeBookings]);
+    { title: "Total Bookings", value: bookings.length, icon: <CalendarOutlined />, color: "#da5d09" },
+    { title: "Active Bookings", value: activeBookings.length, icon: <ClockCircleOutlined />, color: "#11a52a" },
+    { title: "Completed", value: completedBookings.length, icon: <CheckCircleOutlined />, color: "#1f096e" },
+    { title: "Cancelled", value: cancelledBookings.length, icon: <CloseCircleOutlined />, color: "#ee0a0a" },
+    { title: "Total Spent", value: `$${totalSpent.toFixed(2)}`, icon: <DollarOutlined />, color: "#a01299" },
+  ], [bookings.length, activeBookings.length, completedBookings.length, cancelledBookings.length, totalSpent]);
 
-  const columns = [
-    {
-      title: "Customer Name",
-      dataIndex: "customerName",
-    },
-    {
-      title: "Salon Name",
-      dataIndex: "salonName",
-    },
-    {
-      title: "Service",
-      dataIndex: "serviceName",
-    },
-    {
-      title: "Date & Time",
-      dataIndex: "appointmentDate",
-    },
-    {
-      title: "Staff",
-      dataIndex: "staffName",
-    },
-    {
-      title: "Amount",
-      dataIndex: "amount",
-      render: (amount: number) => (
-        <span className="font-semibold">${amount}</span>
-      ),
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      render: (status: string) => <StatusBadge type="booking" value={status} />,
-    },
-    {
-      title: "Action",
-      key: "action",
-      render: (_: any, record: any) => (
-        <Button
-          type="link"
-          danger
-          size="small"
-          onClick={() => showCancelConfirm(record)}
-          disabled={record.status === "cancelled" || record.status === "completed"}
-          className="hover:scale-105 transition-transform"
-          icon={<CloseCircleOutlined />}
-        >
-          Cancel
-        </Button>
-      ),
-    },
-  ];
-
-  if (!token) {
-    return (
-      <div className="p-6 text-center">
-        <Card className="shadow-sm">
-          <ExclamationCircleOutlined className="text-4xl text-blue-500 mb-4" />
-          <p className="text-lg">Please login to view your bookings</p>
-        </Card>
-      </div>
-    );
-  }
-
-  const isLoading = (loading && !infiniteData) || referenceLoading;
+  const isInitialLoading = referenceLoading || (isLoading && !infiniteData);
 
   return (
     <>
       <div className="p-6">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>My Bookings</h1>
-          <p className="text-gray-500" style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage all your appointments</p>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "PT Serif, serif" }}>My Bookings</h1>
+          <p className="text-gray-500" style={{ fontFamily: "Public Sans, sans-serif" }}>Manage all your appointments</p>
         </div>
-
         <Row gutter={[16, 16]} className="mb-6">
-          {stats.map((stat, index) => (
-            <Col xs={24} sm={12} lg={6} key={index}>
-              <StatCard
-                title={stat.title}
-                value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-              />
+          {stats.map((stat) => (
+            <Col xs={24} sm={12} lg={6} key={stat.title}>
+              <StatCard title={stat.title} value={stat.value} icon={stat.icon} color={stat.color} />
             </Col>
           ))}
         </Row>
-
         <Card className="shadow-sm border border-gray-100">
           <div className="mb-4 flex justify-between items-center">
-            <div className="p-2 font-medium">
-              Booking List
-              {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
+            <div className="p-2 font-medium flex items-center gap-2">
+              <span>Booking List</span>
+              {isFetching && !isFetchingNextPage && <Spin size="small" />}
             </div>
           </div>
-
-          <DataTable
-            data={bookings}
-            columns={columns}
-            loading={isLoading}
-            showActions={false}
-            rowKey="key"
-          />
-
+          <DataTable data={bookings} tableType="bookings" loading={isInitialLoading} showActions={false} onCancel={showCancelConfirm} rowKey="key" />
           <div ref={loadMoreRef} className="py-4">
             {isFetchingNextPage && (
               <div className="text-center py-4">
@@ -472,7 +275,10 @@ const CustomerBookings: React.FC = () => {
                 <p className="mt-2 text-gray-500">Loading more bookings...</p>
               </div>
             )}
-            {!hasNextPage && bookings.length === 0 && !isLoading && (
+            {!hasNextPage && bookings.length > 0 && (
+              <div className="text-center py-4 text-sm text-gray-400">All bookings loaded</div>
+            )}
+            {!hasNextPage && bookings.length === 0 && !isInitialLoading && (
               <div className="text-center py-8">
                 <FileTextOutlined className="text-4xl text-gray-300 mb-3" />
                 <p className="text-gray-500">No bookings found</p>
@@ -494,23 +300,11 @@ const CustomerBookings: React.FC = () => {
         }
         open={cancelModalVisible}
         onOk={handleCancelBooking}
-        onCancel={() => {
-          setCancelModalVisible(false);
-          setSelectedBooking(null);
-          setCancelReason("");
-          setCancelMessage("");
-        }}
+        onCancel={closeCancelModal}
         okText="Yes, Cancel Booking"
         cancelText="Keep Booking"
-        okButtonProps={{
-          danger: true,
-          loading: cancelBookingMutation.isPending,
-          disabled: !cancelReason,
-          className: "hover:scale-105 transition-transform"
-        }}
-        cancelButtonProps={{
-          className: "hover:scale-105 transition-transform"
-        }}
+        okButtonProps={{ danger: true, loading: cancelBookingMutation.isPending, disabled: !cancelReason, className: "hover:scale-105 transition-transform" }}
+        cancelButtonProps={{ className: "hover:scale-105 transition-transform" }}
         width={600}
         className="cancel-modal"
       >
@@ -520,13 +314,10 @@ const CustomerBookings: React.FC = () => {
               <ExclamationCircleOutlined className="text-red-500 text-xl mt-0.5" />
               <div>
                 <p className="text-red-600 font-semibold">This action cannot be undone!</p>
-                <p className="text-gray-600 text-sm mt-1">
-                  Your booking slot will be released immediately.
-                </p>
+                <p className="text-gray-600 text-sm mt-1">Your booking slot will be released immediately.</p>
               </div>
             </div>
           </div>
-
           {selectedBooking && (
             <div className="mb-5 p-4 bg-gray-50 rounded-xl border border-gray-100">
               <h4 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -534,83 +325,47 @@ const CustomerBookings: React.FC = () => {
                 Booking Details
               </h4>
               <div className="grid grid-cols-2 gap-y-2 text-sm">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span>Salon:</span>
-                </div>
+                <div className="text-gray-600">Salon:</div>
                 <div className="font-medium text-gray-800">{selectedBooking.salonName}</div>
-
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span>Service:</span>
-                </div>
+                <div className="text-gray-600">Service:</div>
                 <div className="font-medium text-gray-800">{selectedBooking.serviceName}</div>
-
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span>Staff:</span>
-                </div>
+                <div className="text-gray-600">Staff:</div>
                 <div className="font-medium text-gray-800">{selectedBooking.staffName}</div>
-
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span>Date:</span>
-                </div>
+                <div className="text-gray-600">Date:</div>
                 <div className="font-medium text-gray-800">{selectedBooking.appointmentDate}</div>
-
-                <div className="flex items-center gap-2 text-gray-600">
-                  <span>Amount:</span>
-                </div>
-                <div className="font-medium text-green-600">${selectedBooking.amount}</div>
+                <div className="text-gray-600">Amount:</div>
+                <div className="font-medium text-green-600">${selectedBooking.amount.toFixed(2)}</div>
               </div>
             </div>
           )}
-
           <Divider className="my-4" />
-
           <div className="mb-4">
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Reason for Cancellation <span className="text-red-500">*</span>
             </label>
-            <Select
-              placeholder="Select a reason for cancellation"
-              value={cancelReason || undefined}
-              onChange={(value) => setCancelReason(value)}
-              style={{ width: '100%' }}
-              className="rounded-lg"
-              size="large"
-              showSearch
-              optionFilterProp="label"
-              options={cancellationReasons.map(reason => ({
-                value: reason.value,
-                label: reason.label
-              }))}
-            />
+            <Select placeholder="Select a reason for cancellation" value={cancelReason || undefined} onChange={setCancelReason}
+              style={{ width: "100%" }} size="large" showSearch optionFilterProp="label" options={cancellationReasons} />
             {cancelReason && (
               <div className="mt-2">
                 <Tag color="blue" className="text-sm">
-                  {cancellationReasons.find(r => r.value === cancelReason)?.label}
+                  {cancellationReasons.find((reason) => reason.value === cancelReason)?.label}
                 </Tag>
               </div>
             )}
           </div>
-
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               <Space size={4}>
-                Additional Message <span className="text-gray-400 font-normal">(Optional)</span>
+                Additional Message
+                <span className="text-gray-400 font-normal">(Optional)</span>
               </Space>
             </label>
-            <Input.TextArea
-              placeholder="Any additional comments or feedback..."
-              value={cancelMessage}
-              onChange={(e) => setCancelMessage(e.target.value)}
-              rows={2}
-              maxLength={300}
-              showCount
-              className="rounded-lg hover:border-blue-400 focus:border-blue-500 transition-colors"
-            />
+            <Input.TextArea placeholder="Any additional comments or feedback..." value={cancelMessage}
+              onChange={(event) => setCancelMessage(event.target.value)} rows={2} maxLength={300} showCount className="rounded-lg hover:border-blue-400 focus:border-blue-500 transition-colors" />
           </div>
         </div>
       </Modal>
     </>
   );
 };
-
 export default CustomerBookings;

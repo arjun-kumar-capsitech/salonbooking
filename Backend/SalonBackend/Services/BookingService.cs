@@ -3,7 +3,6 @@ using MongoDB.Driver;
 using SalonBackend.Hubs;
 using SalonBackend.Models;
 
-
 namespace SalonBackend.Services
 {
     public class BookingService

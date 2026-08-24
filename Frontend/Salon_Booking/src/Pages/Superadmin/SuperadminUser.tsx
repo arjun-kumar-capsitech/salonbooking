@@ -1,422 +1,312 @@
-import { Card, Button, Input, Select, Form, message, Spin } from 'antd';
-import { PlusOutlined, SearchOutlined, MailOutlined } from '@ant-design/icons';
-import { UserCog } from 'lucide-react';
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { DataTable, StatusBadge } from '../../Components/Ui/Table';
-import { InputField, SelectField } from '../../Components/Ui/Forms';
-import ModalForm from '../../Components/Ui/Modals';
+import { Card, Button, Input, Select, Form, message, Spin } from "antd";
+import { PlusOutlined, SearchOutlined, MailOutlined } from "@ant-design/icons";
+import { UserCog } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DataTable, StatusBadge } from "../../Components/Ui/Table";
+import { InputField, SelectField } from "../../Components/Ui/Forms";
+import ModalForm from "../../Components/Ui/Modals";
 import dayjs from "dayjs";
-import { getSalonBookingAPI } from '../../api/generated';
-import { useSearch } from '../../utils/FilterData';
+import { getSalonBookingAPI, UserRole, type User } from "../../api/generated";
+import { useSearch } from "../../utils/FilterData";
+import type { UserRow, UserFormValues, UserPage } from "../../Types/Alltypes";
 
-const { getApiUser,  getApiStaff, putApiUserId,  postApiUserRegisterEmployee,  postApiUserRegisterCustomer, deleteApiUserId } = getSalonBookingAPI();
-const { Option } = Select;
+const { getApiUser, putApiUserId, postApiUserRegisterEmployee, postApiUserRegisterCustomer, deleteApiUserId } = getSalonBookingAPI();
+
+const axiosConfig = { withCredentials: true,};
+
+
+const parseResponse = <T,>(response: unknown): T | null => {
+  if (!response || typeof response !== "object") return null;
+  const data = (response as { data?: unknown }).data;
+  if (typeof data === "string") {
+    try {
+      return JSON.parse(data) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  return data as T;
+};
+
+const getRoleLabel = (role?: number): string => {
+  switch (role) {
+    case UserRole.NUMBER_1:
+      return "SuperAdmin";
+    case UserRole.NUMBER_2:
+      return "Admin";
+    case UserRole.NUMBER_3:
+      return "Employee";
+    case UserRole.NUMBER_4:
+      return "Customer";
+    default:
+      return "Unknown";
+  }
+};
 
 const SuperAdminUser = () => {
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [form] = Form.useForm();
-  const [roleFilter, setRoleFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [form] = Form.useForm<UserFormValues>();
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const queryClient = useQueryClient();
-  const token = localStorage.getItem("authToken");
-  
-  const axiosConfig = {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-
-  const ResponseData = (response: any) => {
-    if (!response) return null;
-    if (typeof response.data === 'string') {
-      try {
-        return JSON.parse(response.data);
-      } catch {
-        return null;
-      }
-    }
-    return response.data;
-  };
-
   const resetModal = () => {
     setModalVisible(false);
     setEditingUser(null);
     form.resetFields();
   };
 
-  const { data: staffData, isLoading: staffLoading } = useQuery({
-    queryKey: ['staffList'],
-    queryFn: async () => {
-      const response = await getApiStaff(undefined, axiosConfig);
-      const parsedData = ResponseData(response);
-      if (parsedData?.status === true && parsedData?.result) {
-        const result = parsedData.result;
-        if (Array.isArray(result)) {
-          return result;
-        } else if (result.data && Array.isArray(result.data)) {
-          return result.data;
-        }
-      }
-      return [];
-    },
-  });
-
-  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading, isFetching } = useInfiniteQuery({
-    queryKey: ['allUsers', roleFilter, statusFilter],
+  const { data: infiniteData, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading: usersLoading, isFetching } = useInfiniteQuery<UserPage>({
+    queryKey: ["allUsers", roleFilter, statusFilter],
     initialPageParam: 1,
-    queryFn: async ({ pageParam = 1 }) => {
-      try {
-        const response = await getApiUser({ page: pageParam, pageSize: 4 }, axiosConfig);
-        const parsedData = ResponseData(response);
-        if (!parsedData?.status || !parsedData?.result) {
-          return {
-            data: [],
-            totalCount: 0,
-            hasNextPage: false,
-            nextPage: pageParam + 1
-          };
-        }
-        let rawUsers = [];
-        let pagination = null;
-
-        const result = parsedData.result;
-        if (Array.isArray(result)) {
-          rawUsers = result;
-          pagination = parsedData.pagination || null;
-        } else if (result?.data && Array.isArray(result.data)) {
-          rawUsers = result.data;
-          pagination = result.pagination || parsedData.pagination || null;
-        } else {
-          rawUsers = [];
-        }
-
-        const transformedUsers = rawUsers.map((u: any, index: number) => ({
-          key: u.id || u._id || `${pageParam}-${index}`,
-          id: u.id || u._id,
-          fullName: u.fullName || u.FullName || u.name || 'Unknown',
-          email: u.email || u.Email || 'No Email',
-          role: u.role || u.Role || 4,
-          isActive: u.isActive !== undefined ? u.isActive : u.IsActive,
-          createdAt: u.createdAt || u.CreatedAt || new Date().toISOString(),
-          phoneNumber: u.phoneNumber || u.PhoneNumber || '',
-          salonName: u.salonName || u.SalonName || ''
-        }));
-
-        let finalData = transformedUsers;
-        if (roleFilter !== 'all') {
-          finalData = finalData.filter((u: any) => {
-            if (roleFilter === 'SuperAdmin') return u.role === 1;
-            if (roleFilter === 'Admin') return u.role === 2;
-            if (roleFilter === 'Employee') return u.role === 3;
-            if (roleFilter === 'Customer') return u.role === 4;
-            return true;
-          });
-        }
-        if (statusFilter !== 'all') {
-          finalData = finalData.filter((u: any) => {
-            if (statusFilter === 'active') return u.isActive === true;
-            if (statusFilter === 'inactive') return u.isActive === false;
-            return true;
-          });
-        }
-
-        const totalCount = pagination?.totalCount || finalData.length;
-        const hasNext = pagination?.hasNextPage || false;
-        return {
-          data: finalData,
-          totalCount: totalCount,
-          hasNextPage: hasNext,
-          nextPage: pageParam + 1,
+    queryFn: async ({ pageParam }) => {
+      const response = await getApiUser({ page: Number(pageParam), pageSize: 4 }, axiosConfig);
+      const parsedData = parseResponse<{
+        status?: boolean;
+        result?: {
+          data?: User[] | null;
+          totalCount?: number;
+          hasNextPage?: boolean;
         };
-      } catch (error) {
-        console.error('Error fetching users:', error);
+      }>(response);
+      if (!parsedData?.status || !parsedData.result) {
         return {
           data: [],
           totalCount: 0,
           hasNextPage: false,
-          nextPage: pageParam + 1,
+          nextPage: Number(pageParam) + 1,
         };
       }
+
+      const rawUsers = parsedData.result.data ?? [];
+
+      const users: UserRow[] = rawUsers.map((user, index) => ({
+        ...user,
+        key: String(user.id ?? `${pageParam}-${index}`),
+        id: user.id,
+        fullName: user.fullName ?? user.name ?? "Unknown",
+        email: user.email ?? "No Email",
+        role: user.role ?? UserRole.NUMBER_4,
+        isActive: user.isActive ?? false,
+        phoneNumber: user.phoneNumber ?? "",
+        salonName: user.salonName ?? "",
+      }));
+
+      const filteredUsers = users.filter((user) => {
+        const roleMatch = roleFilter === "all" || (roleFilter === "Admin" && user.role === UserRole.NUMBER_2) || (roleFilter === "Employee" && user.role === UserRole.NUMBER_3) || (roleFilter === "Customer" && user.role === UserRole.NUMBER_4);
+        const statusMatch = statusFilter === "all" || (statusFilter === "active" && user.isActive === true) || (statusFilter === "inactive" && user.isActive === false);
+        return roleMatch && statusMatch;
+      });
+
+      return {
+        data: filteredUsers,
+        totalCount: parsedData.result.totalCount ?? filteredUsers.length,
+        hasNextPage: parsedData.result.hasNextPage ?? false,
+        nextPage: Number(pageParam) + 1,
+      };
     },
     getNextPageParam: (lastPage) => lastPage.hasNextPage ? lastPage.nextPage : undefined,
-    enabled: staffData !== undefined,
   });
 
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
-
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
-    observerRef.current = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    if (loadMoreRef.current) {
-      observerRef.current.observe(loadMoreRef.current);
-    }
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
+    observerRef.current?.disconnect();
+    observerRef.current = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
       }
+    }, { threshold: 0.1 });
+
+    if (loadMoreRef.current) observerRef.current.observe(loadMoreRef.current);
+    return () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
     };
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const allUsers = useMemo(() => {
-    return infiniteData?.pages?.flatMap(page => page.data) || [];
-  }, [infiniteData]);
-
-  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(
-    allUsers,
-    ['fullName', 'email'],
-    500
-  );
-
-  const filteredUsers = useMemo(() => {
-    return searchFilteredData || [];
-  }, [searchFilteredData]);
-
-  const totalCount = infiniteData?.pages?.[0]?.totalCount || 0;
-
-  const staffList = useMemo(() => {
-    return (staffData || []).map((s: any) => ({
-      id: s.id || s._id,
-      name: s.name || s.Name || s.fullName || s.FullName || 'Unknown',
-      email: s.email || s.Email,
-      salonName: s.salonName || s.SalonName
-    }));
-  }, [staffData]);
+  const allUsers = useMemo<UserRow[]>(() => infiniteData?.pages.flatMap((page) => page.data) ?? [], [infiniteData]);
+  const { searchText, setSearchText, filteredData: searchFilteredData } = useSearch(allUsers, ["fullName", "email"], 500);
+  const filteredUsers = useMemo(() => searchFilteredData ?? [], [searchFilteredData]);
+  const totalCount = infiniteData?.pages[0]?.totalCount ?? 0;
 
   const createEmployeeMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      const response = await postApiUserRegisterEmployee(payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Employee registration failed");
-      }
+    mutationFn: async (staffId: string) => {
+      const response = await postApiUserRegisterEmployee({ staffId }, axiosConfig);
+      const data = parseResponse<{ status?: boolean; message?: string }>(response);
+      if (!data?.status) throw new Error(data?.message ?? "Employee registration failed");
       return response;
     },
     onSuccess: () => {
-      message.success('Employee registered successfully');
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      message.success("Employee registered successfully");
+      queryClient.invalidateQueries({ queryKey: ["allUsers"] });
       resetModal();
     },
-    onError: (error: any) => {
-      message.error(error?.message || error?.response?.data?.message || 'Failed to register employee');
-    },
+    onError: (error: Error) => message.error(error.message || "Failed to register employee"),
   });
 
   const createCustomerMutation = useMutation({
-    mutationFn: async (payload: any) => {
+    mutationFn: async (payload: { fullName: string; email: string; phoneNumber: string; password: string; confirmPassword: string }) => {
       const response = await postApiUserRegisterCustomer(payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Customer registration failed");
-      }
+      const data = parseResponse<{ status?: boolean; message?: string }>(response);
+      if (!data?.status) throw new Error(data?.message ?? "Customer registration failed");
       return response;
     },
     onSuccess: () => {
-      message.success('Customer registered successfully');
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      message.success("Customer registered successfully");
+      queryClient.invalidateQueries({ queryKey: ["allUsers"] });
       resetModal();
     },
-    onError: (error: any) => {
-      message.error(error?.message || error?.response?.data?.message || 'Failed to register customer');
-    },
+    onError: (error: Error) => message.error(error.message || "Failed to register customer"),
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: any }) => {
+    mutationFn: async ({ id, payload }: { id: string; payload: { fullName: string; email: string; phoneNumber: string; salonName: string; salonAddress: string; role: number; isActive: boolean } }) => {
       const response = await putApiUserId(id, payload, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Update failed");
-      }
+      const data = parseResponse<{ status?: boolean; message?: string }>(response);
+      if (!data?.status) throw new Error(data?.message ?? "Update failed");
       return response;
     },
     onSuccess: () => {
-      message.success('User updated successfully');
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      message.success("User updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["allUsers"] });
       resetModal();
     },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.message || 'Failed to update user');
-    },
+    onError: (error: Error) => message.error(error.message || "Failed to update user"),
   });
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await deleteApiUserId(id, axiosConfig);
-      if (!response.data?.status) {
-        throw new Error(response.data?.message || "Delete failed");
-      }
+      const data = parseResponse<{ status?: boolean; message?: string }>(response);
+      if (!data?.status) throw new Error(data?.message ?? "Delete failed");
       return response;
     },
     onSuccess: () => {
-      message.success('User deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+      message.success("User deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["allUsers"] });
     },
-    onError: (error: any) => {
-      message.error(error?.response?.data?.message || 'Failed to delete user');
-    },
+    onError: (error: Error) => message.error(error.message || "Failed to delete user"),
   });
 
-  const handleFormSubmit = async (values: any) => {
-    if (editingUser) {
-      const payload = {
+  const handleFormSubmit = async (values: UserFormValues) => {
+    const role = Number(values.role);
+
+    if (editingUser?.id) {
+      await updateUserMutation.mutateAsync({
+        id: String(editingUser.id),
+        payload: {
+          fullName: values.fullName,
+          email: values.email,
+          phoneNumber: values.phoneNumber ?? "",
+          salonName: values.salonName ?? "",
+          salonAddress: values.salonAddress ?? "",
+          role,
+          isActive: values.isActive === "true",
+        },
+      });
+      return;
+    }
+
+    if (role === UserRole.NUMBER_3) {
+      if (!values.staffId) {
+        message.error("Please enter staff ID");
+        return;
+      }
+      await createEmployeeMutation.mutateAsync(values.staffId);
+      return;
+    }
+
+    if (role === UserRole.NUMBER_4) {
+      const password = values.password ?? "123456";
+
+      await createCustomerMutation.mutateAsync({
         fullName: values.fullName,
         email: values.email,
-        phoneNumber: values.phoneNumber || '',
-        salonName: values.salonName || '',
-        salonAddress: values.salonAddress || '',
-        role: Number(values.role),
-        isActive: values.isActive === "true"
-      };
-      await updateUserMutation.mutateAsync({ id: editingUser.id, payload });
-    } else {
-      if (Number(values.role) === 3) {
-        await createEmployeeMutation.mutateAsync({ staffId: values.staffId });
-      } else if (Number(values.role) === 4) {
-        const payload = {
-          fullName: values.fullName,
-          email: values.email,
-          phoneNumber: values.phoneNumber || "",
-          password: values.password || "123456",
-          confirmPassword: values.password || "123456"
-        };
-        await createCustomerMutation.mutateAsync(payload);
-      } else if (Number(values.role) === 1 || Number(values.role) === 2) {
-        const payload = {
-          fullName: values.fullName,
-          email: values.email,
-          phoneNumber: values.phoneNumber || "",
-          password: values.password || "123456",
-          confirmPassword: values.password || "123456",
-          role: Number(values.role),
-          isActive: values.isActive === "true"
-        };
-        await createCustomerMutation.mutateAsync(payload);
-      } else {
-        message.error("Invalid role selected");
-      }
+        phoneNumber: values.phoneNumber ?? "",
+        password,
+        confirmPassword: password,
+      });
+      return;
     }
+
+    message.error("Only Employee and Customer can be added here");
   };
 
-  const handleDelete = (record: any) => {
-    if (!record.id) return;
-    deleteUserMutation.mutate(record.id);
-  };
-
-  const getRoleLabel = (role: number) => {
-    if (role === 1) return "SuperAdmin";
-    if (role === 2) return "Admin";
-    if (role === 3) return "Employee";
-    if (role === 4) return "Customer";
-    return "Unknown";
+  const handleDelete = (record: UserRow) => {
+    if (record.id) deleteUserMutation.mutate(String(record.id));
   };
 
   const columns = [
     {
-      title: 'User',
-      dataIndex: 'fullName',
-      render: (text: string, record: any) => (
+      title: "User",
+      dataIndex: "fullName",
+      render: (text: string, record: UserRow) => (
         <div>
-          <div className="font-semibold">{text || 'N/A'}</div>
+          <div className="font-semibold">{text || "N/A"}</div>
           <div className="text-gray-500 text-sm">
-            <MailOutlined className="mr-1" /> {record.email || '-'}
+            <MailOutlined className="mr-1" /> {record.email || "-"}
           </div>
         </div>
-      )
+      ),
     },
     {
-      title: 'Role',
-      dataIndex: 'role',
-      render: (role: number) => (
-        <span>{getRoleLabel(role)}</span>
-      )
+      title: "Role",
+      dataIndex: "role",
+      render: (role: number) => <span>{getRoleLabel(role)}</span>,
     },
     {
-      title: 'Status',
-      dataIndex: 'isActive',
-      render: (isActive: boolean) => (
-        <StatusBadge type="user" value={isActive ? "active" : "inactive"} />
-      )
+      title: "Status",
+      dataIndex: "isActive",
+      render: (isActive: boolean) => <StatusBadge type="user" value={isActive ? "active" : "inactive"} />,
     },
     {
-      title: 'Created At',
-      dataIndex: 'createdAt',
-      render: (date: string) => date ? dayjs(date).format("DD MMM YYYY hh:mm A") : 'N/A',
-      width: 180
-    }
+      title: "Created At",
+      dataIndex: "createdAt",
+      width: 180,
+      render: (date?: string) => date ? dayjs(date).format("DD MMM YYYY hh:mm A") : "N/A",
+    },
   ];
 
-  const isLoading = (usersLoading && !infiniteData) || staffLoading;
+  const isLoading = usersLoading;
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold" style={{ fontFamily: 'PT Serif, serif' }}>User Management</h1>
-          <p className="text-gray-600"  style={{ fontFamily: 'Public Sans, sans-serif' }}>Manage All users</p>
-          {totalCount > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Showing {filteredUsers.length} of {totalCount} users
-            </p>
-          )}
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "PT Serif, serif" }}>User Management</h1>
+          <p className="text-gray-600" style={{ fontFamily: "Public Sans, sans-serif" }}>Manage All users</p>
+          {totalCount > 0 && <p className="text-sm text-gray-500 mt-1">Showing {filteredUsers.length} of {totalCount} users</p>}
         </div>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={() => {
-            setEditingUser(null);
-            form.resetFields();
-            form.setFieldsValue({ role: 4, isActive: "true" });
-            setModalVisible(true);
-          }}
-        >
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => {
+          setEditingUser(null);
+          form.resetFields();
+          form.setFieldsValue({ role: UserRole.NUMBER_4, isActive: "true" });
+          setModalVisible(true);
+        }}>
           Add User
         </Button>
       </div>
 
       <Card className="mb-6">
         <div className="flex gap-4 flex-wrap">
-          <Input
-            placeholder="Search users..."
-            prefix={<SearchOutlined />}
-            style={{ width: 300 }}
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            allowClear
-          />
-          <Select
-            style={{ width: 140 }}
-            value={roleFilter}
-            onChange={setRoleFilter}
-          >
-            <Option value="all">All Roles</Option>
-            <Option value="Admin">Admin</Option>
-            <Option value="Employee">Employee</Option>
-            <Option value="Customer">Customer</Option>
+          <Input placeholder="Search users..." prefix={<SearchOutlined />} style={{ width: 300 }} value={searchText} onChange={(e) => setSearchText(e.target.value)} allowClear />
+          <Select style={{ width: 140 }} value={roleFilter} onChange={setRoleFilter}>
+            <Select.Option value="all">All Roles</Select.Option>
+            <Select.Option value="Admin">Admin</Select.Option>
+            <Select.Option value="Employee">Employee</Select.Option>
+            <Select.Option value="Customer">Customer</Select.Option>
           </Select>
-          <Select
-            style={{ width: 120 }}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          >
-            <Option value="all">All Status</Option>
-            <Option value="active">Active</Option>
-            <Option value="inactive">Inactive</Option>
+          <Select style={{ width: 120 }} value={statusFilter} onChange={setStatusFilter}>
+            <Select.Option value="all">All Status</Select.Option>
+            <Select.Option value="active">Active</Select.Option>
+            <Select.Option value="inactive">Inactive</Select.Option>
           </Select>
         </div>
       </Card>
-
       <Card>
         <div className="mb-4 flex justify-between items-center">
           <div className="p-2">
@@ -424,26 +314,18 @@ const SuperAdminUser = () => {
             {isFetching && !isFetchingNextPage && <Spin size="small" className="ml-2" />}
           </div>
         </div>
-
-        <DataTable
-          data={filteredUsers}
-          columns={columns}
-          loading={isLoading}
-          onEdit={(record: any) => {
-            setEditingUser(record);
-            form.setFieldsValue({
-              fullName: record.fullName,
-              email: record.email,
-              phoneNumber: record.phoneNumber,
-              role: record.role,
-              isActive: String(record.isActive)
-            });
-            setModalVisible(true);
-          }}
-          onDelete={handleDelete}
-          showActions={true}
-          rowKey="key"
-        />
+        <DataTable data={filteredUsers} columns={columns} loading={isLoading} onEdit={(record: UserRow) => {
+          setEditingUser(record);
+          form.setFieldsValue({
+            fullName: record.fullName ?? "",
+            email: record.email ?? "",
+            phoneNumber: record.phoneNumber ?? "",
+            role: Number(record.role),
+            isActive: String(record.isActive),
+            salonName: record.salonName ?? "",
+          });
+          setModalVisible(true);
+        }} onDelete={handleDelete} showActions rowKey="key" />
 
         <div ref={loadMoreRef} className="py-4">
           {isFetchingNextPage && (
@@ -453,113 +335,44 @@ const SuperAdminUser = () => {
             </div>
           )}
           {!hasNextPage && filteredUsers.length === 0 && !isLoading && (
-            <div className="text-center py-8 text-gray-500">
-              No users found
-            </div>
+            <div className="text-center py-8 text-gray-500">No users found</div>
           )}
         </div>
       </Card>
 
-      <ModalForm
-        form={form}
-        open={modalVisible}
-        onClose={resetModal}
-        title={
-          <div className="flex items-center gap-2">
-            <UserCog size={20} />
-            {editingUser ? 'Edit User' : 'Add New User'}
-          </div>
-        }
-        initialValues={
-          editingUser
-            ? { ...editingUser, isActive: String(editingUser.isActive) }
-            : { role: 4, isActive: "true" }
-        }
-        onSubmit={handleFormSubmit}
-        submitText={editingUser ? 'Update User' : 'Add User'}
-        loading={updateUserMutation.isPending || createEmployeeMutation.isPending || createCustomerMutation.isPending}
-      >
-        <InputField
-          label="Full Name"
-          name="fullName"
-          placeholder="Enter user name"
-          required={true}
-        />
-        <InputField
-          label="Email"
-          name="email"
-          placeholder="Enter email address"
-          required={true}
-          type="email"
-          prefix={<MailOutlined />}
-        />
+      <ModalForm form={form} open={modalVisible} onClose={resetModal} title={
+        <div className="flex items-center gap-2">
+          <UserCog size={20} />
+          {editingUser ? "Edit User" : "Add New User"}
+        </div>
+      } initialValues={editingUser ? { ...editingUser, isActive: String(editingUser.isActive) } : { role: UserRole.NUMBER_4, isActive: "true" }} onSubmit={handleFormSubmit} submitText={editingUser ? "Update User" : "Add User"} loading={updateUserMutation.isPending || createEmployeeMutation.isPending || createCustomerMutation.isPending}>
+        <InputField label="Full Name" name="fullName" placeholder="Enter user name" required />
+        <InputField label="Email" name="email" placeholder="Enter email address" required type="email" prefix={<MailOutlined />} />
+        {!editingUser && <InputField label="Password" name="password" placeholder="Enter password" type="password" required />}
 
-        {!editingUser && (
-          <>
-            <InputField
-              label="Password"
-              name="password"
-              placeholder="Enter password"
-              type="password"
-              required={true}
-            />
+        <Form.Item noStyle shouldUpdate>
+          {({ getFieldValue }) => {
+            const role = Number(getFieldValue("role"));
+            if (role === UserRole.NUMBER_3 && !editingUser) {
+              return <InputField label="Staff ID" name="staffId" placeholder="Enter staff ID" required />;
+            }
+            if ((role === UserRole.NUMBER_1 || role === UserRole.NUMBER_2) && !editingUser) {
+              return <InputField label="Salon Name" name="salonName" placeholder="Enter salon name" required />;
+            }
+            return null;
+          }}
+        </Form.Item>
 
-            <Form.Item noStyle shouldUpdate>
-              {({ getFieldValue }) => {
-                const role = getFieldValue('role');
-                if (Number(role) === 3) {
-                  return (
-                    <SelectField
-                      label="Select Staff"
-                      name="staffId"
-                      required={true}
-                      options={staffList.map((staff: any) => ({
-                        value: staff.id,
-                        label: staff.name || staff.email
-                      }))}
-                      placeholder="Select staff member"
-                    />
-                  );
-                }
-                if (Number(role) === 1 || Number(role) === 2) {
-                  return (
-                    <InputField
-                      label="Salon Name"
-                      name="salonName"
-                      placeholder="Enter salon name"
-                      required={true}
-                    />
-                  );
-                }
-                return null;
-              }}
-            </Form.Item>
-          </>
-        )}
-
-        <SelectField
-          label="Role"
-          name="role"
-          placeholder="Select role"
-          required={true}
-          options={[
-            { value: 1, label: 'SuperAdmin' },
-            { value: 2, label: 'Admin' },
-            { value: 3, label: 'Employee' },
-            { value: 4, label: 'Customer' }
-          ]}
-        />
-
-        <SelectField
-          label="Status"
-          name="isActive"
-          placeholder="Select status"
-          required={true}
-          options={[
-            { value: "true", label: 'Active' },
-            { value: "false", label: 'Inactive' }
-          ]}
-        />
+        <SelectField label="Role" name="role" placeholder="Select role" required options={[
+          { value: 1, label: "SuperAdmin" },
+          { value: 2, label: "Admin" },
+          { value: 3, label: "Employee" },
+          { value: 4, label: "Customer" },
+        ]} />
+        <SelectField label="Status" name="isActive" placeholder="Select status" required options={[
+          { value: "true", label: "Active" },
+          { value: "false", label: "Inactive" },
+        ]} />
       </ModalForm>
     </div>
   );

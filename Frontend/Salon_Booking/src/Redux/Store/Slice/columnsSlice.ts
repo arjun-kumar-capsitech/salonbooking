@@ -20,10 +20,9 @@ const initialState: ColumnsState = {
   currentColumns: [],
   currentData: [],
 
-  // ✅ FIXED - Added "Salon Name" for Admin/SuperAdmin
   adminServices: [
     "Service Name",
-    "Salon Name",    // ✅ Added
+    "Salon Name",   
     "Duration",
     "Price", 
     "Status",

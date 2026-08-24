@@ -9,32 +9,24 @@ export const connection = new signalR.HubConnectionBuilder()
   .configureLogging(signalR.LogLevel.Information)
   .build();
 
-export const startSignalR = async () => {
+let starting = false;
+
+export const startSignalR = async (): Promise<boolean> => {
+  if (connection.state === signalR.HubConnectionState.Connected) return true;
+  if (starting || connection.state === signalR.HubConnectionState.Connecting) return false;
+
+  starting = true;
+
   try {
-    if (connection.state === signalR.HubConnectionState.Disconnected) {
-      console.log("Starting SignalR connection...");
-      await connection.start();
-      console.log("SignalR Connected Successfully!");
-      console.log("Connection ID:", connection.connectionId);
-      return true;
-    }
-
-    if (connection.state === signalR.HubConnectionState.Connected) {
-      console.log("SignalR already connected");
-      return true;
-    }
-
-    console.log(`SignalR state: ${connection.state}`);
-    return false;
+    await connection.start();
+    console.log("SignalR Connected Successfully!");
+    console.log("Connection ID:", connection.connectionId);
+    return true;
   } catch (error) {
     console.error("SignalR Connection Error:", error);
-
-    setTimeout(() => {
-      console.log("Retrying SignalR connection...");
-      startSignalR();
-    }, 5000);
-
     return false;
+  } finally {
+    starting = false;
   }
 };
 
@@ -47,5 +39,6 @@ connection.onreconnected((connectionId) => {
 });
 
 connection.onclose((error) => {
-  console.error("SignalR Connection Closed:", error);
+  if (error) console.error("SignalR Connection Closed:", error);
+  else console.log("SignalR Connection Closed");
 });

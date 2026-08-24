@@ -3,47 +3,66 @@ import { Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useMutation } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
 import { setLogin } from "../../Redux/Store/Slice/authSlice";
-import { getSalonBookingAPI } from "../../api/generated";
-
+import { getSalonBookingAPI, type LoginRequest, type LoginResponseApiResponse, } from "../../api/generated";
+import { getDashboardPath } from "../../config/Route";
 const { postApiUserLogin } = getSalonBookingAPI();
 
 function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState<LoginRequest>({
+    email: "",
+    password: "",
+  });
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const validateField = (name: string, value: string) => {
+  const validateField = (name: string, value: string): string => {
     if (name === "email") {
       if (!value.trim()) return "Email is required";
-      if (!value.includes("@") || !value.includes(".")) return "Email must contain '@' and '.'";
-      if (!/^[^\s@]+@([^\s@]+\.)+[^\s@]+$/.test(value)) return "Please enter a valid email address";
+      if (!value.includes("@") || !value.includes(".")) {
+        return "Email must contain '@' and '.'";
+      }
+      if (!/^[^\s@]+@([^\s@]+\.)+[^\s@]+$/.test(value)) {
+        return "Please enter a valid email address";
+      }
       return "";
     }
     if (name === "password") {
       if (!value) return "Password is required";
-      if (value.length < 6) return "Password must be at least 6 characters";
+      if (value.length < 6) {
+        return "Password must be at least 6 characters";
+      }
       return "";
     }
     return "";
   };
 
-  const isFormValid = () => {
-    const emailError = validateField("email", formData.email);
-    const passwordError = validateField("password", formData.password);
+  const isFormValid = (): boolean => {
+    const emailError = validateField(
+      "email",
+      formData.email ?? ""
+    );
+    const passwordError = validateField(
+      "password",
+      formData.password ?? ""
+    );
     return !emailError && !passwordError;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (submitted) setError("");
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  // ✅ Role mapping — String se Number mein convert karein
   const roleMap: Record<string, number> = {
     SuperAdmin: 1,
     Admin: 2,
@@ -51,162 +70,197 @@ function Login() {
     Customer: 4,
   };
 
-  const loginMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const response = await postApiUserLogin({
-        email: data.email,
-        password: data.password,
+  const loginMutation = useMutation<LoginResponseApiResponse, AxiosError<{ message?: string }>, LoginRequest>({
+    mutationFn: async (data: LoginRequest): Promise<LoginResponseApiResponse> => {
+      const response = await postApiUserLogin(data, {
+        withCredentials: true,
       });
       return response.data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       if (!data) {
         setError("No response from server");
         return;
       }
-
-      if (data.status === false) {
-        setError(data.message || "Invalid email or password");
+      if (!data.status) {
+        setError(
+          data.message || "Invalid email or password"
+        );
         return;
       }
-
       const result = data.result;
-      if (!result || !result.token) {
+      if (!result) {
         setError("Invalid response from server");
         return;
       }
+      const role = result.role ?? "";
+      const roleNumber = roleMap[role];
+      if (!roleNumber) {
+        setError("Invalid user role");
+        return;
+      }
 
-      // ✅ String role ko number mein map karein
-      const roleNumber = roleMap[result.role] || 4; // default Customer
-
-      // ✅ User object — saari required fields ke saath
       const user = {
-        id: result.userId,
-        fullName: result.fullName,
-        email: result.email,
-        role: roleNumber,              // ✅ Ab number hai (2, 3, 4)
-        companyId: result.companyId,
-        salonName: result.companyId,   // ✅ 🔥 YE LINE ADD KI — backend se companyId hi salonName bhej raha hai
+        id: result.userId ?? "",
+        fullName: result.fullName ?? "",
+        email: result.email ?? "",
+        role: roleNumber,
+        companyId: result.companyId ?? "",
+        salonName: result.companyId ?? "",
         isActive: true,
         joinedDate: new Date().toISOString(),
       };
 
-      const token = result.token;
+      dispatch(
+        setLogin({
+          user,
+        })
+      );
 
-      localStorage.setItem("user", JSON.stringify(user));
-      localStorage.setItem("jwt_token", token);
-      localStorage.setItem("authToken", token);
-      dispatch(setLogin({ user, token }));
-
-      // ✅ Role check — ab number ke saath
-      const savedStatus = JSON.parse(localStorage.getItem("salonStatus") || "{}");
-      if (user.role === 2 && savedStatus[user.id] !== "approved") {
-        setError("Login will only be allowed after approval by the Super Admin.");
+      const redirectPath =
+      localStorage.getItem("redirectAfterLogin");
+      localStorage.removeItem("redirectAfterLogin");
+      if (
+        redirectPath &&
+        redirectPath !== "/" &&
+        redirectPath !== "/login"
+      ) {
+        navigate(redirectPath, {
+          replace: true,
+        });
         return;
       }
-
-      const redirectPath = localStorage.getItem("redirectAfterLogin");
-      localStorage.removeItem("redirectAfterLogin");
-
-      // ✅ Number keys ke saath role routes
-      const roleRoutes: Record<number, string> = {
-        1: "/super-admin/deshboard",
-        2: "/admin/dashboard",
-        3: "/employee/deshbord",
-        4: "/customer/booking",
-      };
-
-      if (redirectPath && redirectPath !== "/" && redirectPath !== "/login") {
-        navigate(redirectPath);
-      } else {
-        navigate(roleRoutes[user.role] || "/");
-      }
+      navigate(getDashboardPath(roleNumber), {
+        replace: true,
+      });
     },
-    onError: (err: any) => {
-      setError(err?.response?.data?.message || "Server error. Please try again.");
-    }
+
+    onError: (err) => {
+      setError(
+        err.response?.data?.message ||
+        "Server error. Please try again."
+      );
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     setError("");
-    if (!isFormValid()) return;
-
-    loginMutation.mutate({
-      email: formData.email,
-      password: formData.password,
-    });
+    if (!isFormValid()) {
+      return;
+    }
+    loginMutation.mutate(formData);
   };
-
-  const emailError = submitted ? validateField("email", formData.email) : "";
-  const passwordError = submitted ? validateField("password", formData.password) : "";
+  const emailError = submitted
+    ? validateField(
+      "email",
+      formData.email ?? ""
+    )
+    : "";
+  const passwordError = submitted
+    ? validateField(
+      "password",
+      formData.password ?? ""
+    )
+    : "";
   const isLoading = loginMutation.isPending;
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-center mb-2">Sign in</h1>
-        <p className="text-gray-600 text-center mb-8 text-sm">Enter your credentials to continue</p>
-
+        <h1 className="text-2xl font-bold text-center mb-2">
+          Sign in
+        </h1>
+        <p className="text-gray-600 text-center mb-8 text-sm">
+          Enter your credentials to continue
+        </p>
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
             {error}
           </div>
         )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-5"
+        >
           <div>
             <input
               type="email"
               name="email"
               placeholder="Email"
-              value={formData.email}
+              value={formData.email ?? ""}
               onChange={handleChange}
-              className={`w-full px-4 py-3 border rounded-lg ${emailError ? "border-red-500" : "border-gray-300"
-                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
               disabled={isLoading}
+              className={`w-full px-4 py-3 border rounded-lg ${emailError
+                ? "border-red-500"
+                : "border-gray-300"
+                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
             />
-            {emailError && <p className="text-red-500 text-sm mt-1">{emailError}</p>}
+            {emailError && (
+              <p className="text-red-500 text-sm mt-1">
+                {emailError}
+              </p>
+            )}
           </div>
-
           <div>
             <div className="relative">
               <input
-                type={showPassword ? "text" : "password"}
+                type={
+                  showPassword
+                    ? "text"
+                    : "password"
+                }
                 name="password"
                 placeholder="Password"
-                value={formData.password}
+                value={formData.password ?? ""}
                 onChange={handleChange}
-                className={`w-full px-4 py-3 border rounded-lg pr-12 ${passwordError ? "border-red-500" : "border-gray-300"
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 disabled={isLoading}
+                className={`w-full px-4 py-3 border rounded-lg pr-12 ${passwordError
+                  ? "border-red-500"
+                  : "border-gray-300"
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
               />
+
               <button
                 type="button"
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                onClick={() =>
+                  setShowPassword((prev) => !prev)
+                }
                 disabled={isLoading}
               >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? (
+                  <EyeOff size={20} />
+                ) : (
+                  <Eye size={20} />
+                )}
               </button>
             </div>
-            {passwordError && <p className="text-red-500 text-sm mt-1">{passwordError}</p>}
+            {passwordError && (
+              <p className="text-red-500 text-sm mt-1">
+                {passwordError}
+              </p>
+            )}
           </div>
-
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={isLoading}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? "Signing in..." : "Sign in"}
+            {isLoading
+              ? "Signing in..."
+              : "Sign in"}
           </button>
-
           <p className="text-center text-gray-600 text-sm mt-6">
             Don't have an account?{" "}
-            <a href="/signup" className="text-blue-600 font-medium hover:text-blue-800">
+            <button
+              type="button"
+              onClick={() => navigate("/signup")}
+              className="text-blue-600 font-medium hover:text-blue-800"
+            >
               Sign up
-            </a>
+            </button>
           </p>
         </form>
       </div>

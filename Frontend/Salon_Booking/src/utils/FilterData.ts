@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-
 export const useDebounce = <T>(value: T, delay: number = 500): T => {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
   const timeoutRef = useRef<number | null>(null);

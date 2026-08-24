@@ -13,7 +13,6 @@ using SalonBackend.Services;
 using SalonBackend.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
-
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -30,7 +29,6 @@ builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSecurityHeaders();
-
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -39,19 +37,17 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "API for Salon Booking Application"
     });
-});
+}); 
 
 var mongoConnectionString =
     builder.Configuration.GetConnectionString("MongoDB")
     ?? "mongodb://localhost:27017";
-
 var databaseName =
     builder.Configuration["MongoDB:DatabaseName"]
     ?? "SalonBookingDB";
 
 var mongoClient = new MongoClient(mongoConnectionString);
 var database = mongoClient.GetDatabase(databaseName);
-
 builder.Services.AddSingleton<IMongoDatabase>(database);
 builder.Services.AddHangfire(config =>
 {
@@ -63,7 +59,6 @@ builder.Services.AddHangfire(config =>
 
 builder.Services.AddHangfireServer();
 builder.Services.AddApplicationServices();
-
 var jwtSecret =
     builder.Configuration["Jwt:Secret"]
     ?? "your-super-secret-jwt-key-minimum-32-characters-long-here";
@@ -79,7 +74,7 @@ builder.Services
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSecret)
+            Encoding.UTF8.GetBytes(jwtSecret)
             )
         };
 
@@ -88,12 +83,10 @@ builder.Services
             OnMessageReceived = context =>
             {
                 var token = context.Request.Cookies["jwt_token"];
-
                 if (!string.IsNullOrEmpty(token))
                 {
                     context.Token = token;
                 }
-
                 return Task.CompletedTask;
             }
         };
@@ -107,28 +100,22 @@ builder.Services.Configure<CookiePolicyOptions>(options =>
 });
 
 var app = builder.Build();
-
 app.UseCors("AllowFrontend");
-
 var securityHeadersPolicy =
     app.Services.GetRequiredService<HeaderPolicyCollection>();
 
 app.UseSecurityHeaders(securityHeadersPolicy);
-
 app.UseSwagger();
-
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint(
         "/swagger/v1/swagger.json",
         "Salon Booking API v1"
     );
-
     c.RoutePrefix = "swagger";
 });
 
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseHangfireDashboard();
