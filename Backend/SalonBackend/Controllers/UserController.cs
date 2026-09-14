@@ -73,6 +73,8 @@ namespace SalonBackend.Controllers
             }
         }
 
+
+
         [HttpPost("logout")]
         public IActionResult Logout()
         {
@@ -301,6 +303,118 @@ namespace SalonBackend.Controllers
                 });
             }
         }
+
+        [Authorize]
+        [HttpPost("change-password")]
+        public async Task<ActionResult<ApiResponse<string>>> ChangePassword(PasswordDto dto)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized();
+            }
+
+            var result = await _userService.ChangePasswordAsync(userId, dto);
+
+            return result.Success
+                ? Ok(new ApiResponse<string>
+                {
+                    Status = true,
+                    Message = result.Message,
+                    Result = null
+                })
+                : BadRequest(new ApiResponse<string>
+                {
+                    Status = false,
+                    Message = result.Message,
+                    Result = null
+                });
+        }
+
+        // [AllowAnonymous]
+        // [HttpPost("forgot-password")]
+        // public async Task<ActionResult<ApiResponse<string>>> ForgotPassword(
+        // PasswordDto dto)
+        // {
+        //     try
+        //     {
+        //         if (dto == null || string.IsNullOrWhiteSpace(dto.Email))
+        //         {
+        //             return BadRequest(new ApiResponse<string>
+        //             {
+        //                 Status = false,
+        //                 Message = "Email is required",
+        //                 Result = null
+        //             });
+        //         }
+
+        //         var result = await _userService.ForgotPasswordAsync(dto.Email);
+
+        //         return Ok(new ApiResponse<string>
+        //         {
+        //             Status = result.Success,
+        //             Message = result.Message,
+        //             Result = null
+        //         });
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return StatusCode(500, new ApiResponse<string>
+        //         {
+        //             Status = false,
+        //             Message = $"Error: {ex.Message}",
+        //             Result = null
+        //         });
+        //     }
+        // }
+
+    //     [AllowAnonymous]
+    //     [HttpPost("reset-password")]
+    //     public async Task<ActionResult<ApiResponse<string>>> ResetPassword(
+    // [FromBody] PasswordDto dto)
+    //     {
+    //         try
+    //         {
+    //             if (dto == null)
+    //             {
+    //                 return BadRequest(new ApiResponse<string>
+    //                 {
+    //                     Status = false,
+    //                     Message = "Invalid password data",
+    //                     Result = null
+    //                 });
+    //             }
+
+    //             var result = await _userService.ResetPasswordAsync(dto);
+
+    //             if (!result.Success)
+    //             {
+    //                 return BadRequest(new ApiResponse<string>
+    //                 {
+    //                     Status = false,
+    //                     Message = result.Message,
+    //                     Result = null
+    //                 });
+    //             }
+
+    //             return Ok(new ApiResponse<string>
+    //             {
+    //                 Status = true,
+    //                 Message = result.Message,
+    //                 Result = "Password reset successfully"
+    //             });
+    //         }
+    //         catch (Exception ex)
+    //         {
+    //             return StatusCode(500, new ApiResponse<string>
+    //             {
+    //                 Status = false,
+    //                 Message = $"Error: {ex.Message}",
+    //                 Result = null
+    //             });
+    //         }
+    //     }
 
         [Authorize(Roles = "SuperAdmin")]
         [HttpPut("reject-admin/{id}")]

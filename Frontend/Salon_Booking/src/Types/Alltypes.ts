@@ -320,3 +320,4 @@ export interface UserResult {
     hasNextPage?: boolean;
   };
 }
+

@@ -18,8 +18,6 @@ const CustomerIndex: React.FC = () => {
     { key: "/customer/booking", icon: <Calendar className="w-5 h-5" />, label: "My Bookings" },
     { key: "/customer/appointment", icon: <Calendar className="w-5 h-5" />, label: "Book Appointment" },
   ];
-
   return <Deshbord menuItems={menuItems}/>;
 };
-
 export default CustomerIndex;

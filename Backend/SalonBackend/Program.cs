@@ -37,11 +37,12 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "API for Salon Booking Application"
     });
-}); 
+});
 
 var mongoConnectionString =
     builder.Configuration.GetConnectionString("MongoDB")
     ?? "mongodb://localhost:27017";
+
 var databaseName =
     builder.Configuration["MongoDB:DatabaseName"]
     ?? "SalonBookingDB";
@@ -74,7 +75,7 @@ builder.Services
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(jwtSecret)
+                Encoding.UTF8.GetBytes(jwtSecret)
             )
         };
 
@@ -103,7 +104,6 @@ var app = builder.Build();
 app.UseCors("AllowFrontend");
 var securityHeadersPolicy =
     app.Services.GetRequiredService<HeaderPolicyCollection>();
-
 app.UseSecurityHeaders(securityHeadersPolicy);
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -112,6 +112,7 @@ app.UseSwaggerUI(c =>
         "/swagger/v1/swagger.json",
         "Salon Booking API v1"
     );
+
     c.RoutePrefix = "swagger";
 });
 
@@ -120,9 +121,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseHangfireDashboard();
 RecurringJob.AddOrUpdate<BookingService>(
-    "clear-pending-bookings",
-    service => service.ClearPendingBookings(),
-    Cron.Daily
+"clear-pending-bookings",
+service => service.ClearPendingBookings(),
+Cron.Daily,
+TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")
 );
 app.MapControllers();
 app.MapHub<BookingHub>("/bookingHub");

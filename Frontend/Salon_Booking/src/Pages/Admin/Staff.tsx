@@ -136,10 +136,8 @@ const StaffManagement = () => {
   const allStaff = useMemo<StaffRow[]>(() => {
     return infiniteData?.pages.flatMap((page) => page.data) ?? [];
   }, [infiniteData]);
-
   const { searchText, setSearchText, filteredData: searchFilteredData }
    = useSearch<StaffRow>(allStaff, ["name", "email"], 500);
-
   const filteredStaff = useMemo(() => {
     const result = searchFilteredData ?? [];
     if (statusFilter === "all") {

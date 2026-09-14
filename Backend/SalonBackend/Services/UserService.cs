@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using MongoDB.Driver;
 using SalonBackend.Models;
 using SalonBackend.Models.Dtos;
+using System.Security.Cryptography;
 
 namespace SalonBackend.Services
 {
@@ -43,7 +44,7 @@ namespace SalonBackend.Services
                     : "Your salon registration is waiting for Super Admin approval.";
                 return new AuthResult { Success = false, Message = msg };
             }
-            
+
             if (!user.IsActive)
                 return new AuthResult { Success = false, Message = "Account is deactivated" };
             var token = GenerateJwtToken(user);
@@ -65,6 +66,165 @@ namespace SalonBackend.Services
                 }
             };
         }
+
+        public async Task<(bool Success, string Message)> ChangePasswordAsync(
+        string userId,
+        PasswordDto dto)
+        {
+            var user = await GetUserByIdAsync(userId);
+
+            if (user == null)
+            {
+                return (false, "User not found");
+            }
+            if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
+            {
+                return (false, "Current password is required");
+            }
+            if (string.IsNullOrWhiteSpace(dto.NewPassword))
+            {
+                return (false, "New password is required");
+            }
+            if (dto.NewPassword != dto.ConfirmPassword)
+            {
+                return (false, "New password and confirm password do not match");
+            }
+
+            var isPasswordValid = BCrypt.Net.BCrypt.Verify(
+                dto.CurrentPassword,
+                user.PasswordHash
+            );
+            if (!isPasswordValid)
+            {
+                return (false, "Current password is incorrect");
+            }
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+                dto.NewPassword
+            );
+            user.UpdatedAt = DateTime.UtcNow;
+            await _users.ReplaceOneAsync(
+                x => x.Id == userId,
+                user
+            );
+            return (true, "Password changed successfully");
+        }
+
+        // public async Task<(bool Success, string Message)> ForgotPasswordAsync(string email)
+        // {
+        //     try
+        //     {
+        //         if (string.IsNullOrWhiteSpace(email))
+        //         {
+        //             return (false, "Email is required");
+        //         }
+
+        //         var user = await _users
+        //             .Find(x => x.Email == email)
+        //             .FirstOrDefaultAsync();
+
+        //         if (user == null)
+        //         {
+        //             return (
+        //                 true,
+        //                 "If this email exists, a password reset link has been sent"
+        //             );
+        //         }
+
+        //         var tokenBytes = RandomNumberGenerator.GetBytes(64);
+        //         var token = Convert.ToBase64String(tokenBytes);
+
+        //         user.ResetPasswordToken = token;
+        //         user.ResetPasswordTokenExpiry = DateTime.UtcNow.AddMinutes(30);
+        //         user.UpdatedAt = DateTime.UtcNow;
+
+        //         var result = await _users.ReplaceOneAsync(
+        //             x => x.Id == user.Id,
+        //             user
+        //         );
+
+        //         if (!result.IsAcknowledged)
+        //         {
+        //             return (false, "Unable to generate password reset token");
+        //         }
+
+        //         if (result.ModifiedCount == 0)
+        //         {
+        //             return (false, "Password reset token was not saved");
+        //         }
+
+        //         return (
+        //             true,
+        //             "Password reset link has been generated"
+        //         );
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         Console.WriteLine("FORGOT PASSWORD ERROR:");
+        //         Console.WriteLine(ex.ToString());
+
+        //         return (
+        //             false,
+        //             $"Forgot password error: {ex.Message}"
+        //         );
+        //     }
+        // }
+        //     public async Task<(bool Success, string Message)> ResetPasswordAsync(
+        // PasswordDto dto)
+        //     {
+        //         if (string.IsNullOrWhiteSpace(dto.Token))
+        //         {
+        //             return (false, "Reset token is required");
+        //         }
+
+        //         if (string.IsNullOrWhiteSpace(dto.NewPassword))
+        //         {
+        //             return (false, "New password is required");
+        //         }
+
+        //         if (dto.NewPassword != dto.ConfirmPassword)
+        //         {
+        //             return (false, "New password and confirm password do not match");
+        //         }
+
+        //         var user = await _users
+        //             .Find(x => x.ResetPasswordToken == dto.Token)
+        //             .FirstOrDefaultAsync();
+
+        //         if (user == null)
+        //         {
+        //             return (false, "Invalid reset token");
+        //         }
+
+        //         if (user.ResetPasswordTokenExpiry == null)
+        //         {
+        //             return (false, "Reset token is invalid");
+        //         }
+
+        //         if (user.ResetPasswordTokenExpiry < DateTime.UtcNow)
+        //         {
+        //             return (false, "Reset token has expired");
+        //         }
+
+        //         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(
+        //             dto.NewPassword
+        //         );
+
+        //         user.ResetPasswordToken = null;
+
+        //         user.ResetPasswordTokenExpiry = null;
+
+        //         user.UpdatedAt = DateTime.UtcNow;
+
+        //         await _users.ReplaceOneAsync(
+        //             x => x.Id == user.Id,
+        //             user
+        //         );
+
+        //         return (
+        //             true,
+        //             "Password reset successfully"
+        //         );
+        //     }
 
         public async Task<AuthResult> RegisterCustomerAsync(RegisterCustomerRequest request)
         {
@@ -90,7 +250,7 @@ namespace SalonBackend.Services
                 request.SalonAddress,
                 request.Password,
                 UserRole.Admin,
-                ApprovalStatus.Pending   
+                ApprovalStatus.Pending
             );
         }
 
@@ -189,7 +349,7 @@ namespace SalonBackend.Services
                 Role = role,
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-                ApprovalStatus = approvalStatus  
+                ApprovalStatus = approvalStatus
             };
 
             await _users.InsertOneAsync(user);

@@ -7,10 +7,13 @@ namespace SalonBackend.Models
     {
         [BsonId]
         [BsonRepresentation(BsonType.ObjectId)]
-        public string Id { get; set; } =  string.Empty;
+        public string Id { get; set; } = string.Empty;
+        
+        [BsonElement("Date")]
+        public DateTime? Date { get; set; }
 
         [BsonElement("Day")]
-        public string Day { get; set; } =  string.Empty;
+        public string Day { get; set; } = string.Empty;
 
         [BsonElement("Opening")]
         public string Opening { get; set; } = string.Empty;

@@ -118,7 +118,7 @@ function Login() {
       );
 
       const redirectPath =
-      localStorage.getItem("redirectAfterLogin");
+        localStorage.getItem("redirectAfterLogin");
       localStorage.removeItem("redirectAfterLogin");
       if (
         redirectPath &&
@@ -243,6 +243,13 @@ function Login() {
               </p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => navigate("/forgot-password")}
+            className="text-blue-600 text-sm hover:text-blue-800"
+          >
+            Forgot Password?
+          </button>
           <button
             type="submit"
             disabled={isLoading}

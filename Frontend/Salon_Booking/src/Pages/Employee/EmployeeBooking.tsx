@@ -100,25 +100,15 @@ const EmployeeBooking = () => {
  
   const getServiceDisplay = (booking: BookingItem): string => { 
     const serviceIds = booking.serviceIds ?? booking.ServiceIds ?? []; 
- 
     if (Array.isArray(serviceIds) && serviceIds.length > 0) { 
       return serviceIds.map((id) => serviceMap[String(id)] ?? "Unknown").join(", "); 
     } 
- 
-    const serviceId = String(booking.serviceId ?? booking.ServiceId ?? ""); 
- 
+    const serviceId = String(booking.serviceId ?? booking.ServiceId ?? "");  
     if (serviceId && serviceMap[serviceId]) return serviceMap[serviceId]; 
- 
     return booking.serviceName ?? booking.ServiceName ?? "Unknown"; 
   }; 
  
-  const { 
-    data: infiniteData, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage, 
-    isLoading: bookingsLoading, 
-    isFetching, 
+  const {  data: infiniteData,  fetchNextPage,  hasNextPage,  isFetchingNextPage,  isLoading: bookingsLoading,  isFetching, 
   } = useInfiniteQuery({ 
     queryKey: ["employee-booking-bookings", staffId], 
     enabled: Boolean(staffId), 
@@ -139,10 +129,8 @@ const EmployeeBooking = () => {
       const bookings = data.result.data.filter( 
         (booking) => String(booking.staffId ?? booking.StaffId ?? "") === staffId 
       ); 
- 
       const transformedBookings: BookingRow[] = bookings.map((booking, index) => { 
         const id = String(booking.id ?? booking._id ?? `${pageParam}-${index}`); 
- 
         const bookingStaffId = String( 
           booking.staffId ?? booking.StaffId ?? "" 
         ); 
@@ -228,7 +216,6 @@ const EmployeeBooking = () => {
             booking.salonName ?? 
             booking.SalonName ?? 
             "N/A", 
- 
           originalData: booking, 
         }; 
       }); 

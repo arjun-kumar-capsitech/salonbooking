@@ -60,10 +60,8 @@ const CustomerAppointment = () => {
 
   const responseData = <T,>(response: unknown): T | null => {
     if (!response) return null;
-
     const responseObject = isRecord(response) ? response : null;
     const data = responseObject && "data" in responseObject ? responseObject.data : response;
-
     if (typeof data === "string") {
       try {
         return JSON.parse(data) as T;
@@ -71,7 +69,6 @@ const CustomerAppointment = () => {
         return null;
       }
     }
-
     return data as T;
   };
 

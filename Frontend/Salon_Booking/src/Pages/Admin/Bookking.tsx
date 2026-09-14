@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import dayjs, { type Dayjs } from "dayjs";
 import { useNavigate } from "react-router-dom";
-import { getSalonBookingAPI, type AdminServices, type Booking, type BookingDto, type SlotRequestDto, type Staff, type User } from "../../api/generated";
+import { getSalonBookingAPI, type AdminServices, type Booking, type BookingDto, type SlotRequestDto, type Staff, type User, type TimeDto } from "../../api/generated";
 import { DataTable } from "../../Components/Ui/Table";
 import { InputField, SelectField } from "../../Components/Ui/Forms";
 import ModalForm from "../../Components/Ui/Modals";
@@ -14,8 +14,8 @@ import { useSearch } from "../../utils/FilterData";
 import { connection, startSignalR } from "../../Services/signalR";
 import { validateField } from "../../Components/Ui/FormError";
 import type { Slot } from "../../Types/Alltypes";
-
 const apiOptions = { withCredentials: true };
+
 const parseResponse = <T,>(data: unknown): T | null => {
   if (typeof data !== "string") return data as T;
   try { return JSON.parse(data) as T; } catch { return null; }
@@ -56,28 +56,37 @@ const Bookings = () => {
       void queryClient.invalidateQueries({ queryKey: ["staffBookings"] });
     };
     connection.on("SlotBooked", refresh);
+
     return () => connection.off("SlotBooked", refresh);
   }, [queryClient]);
 
   const { data: refs, isLoading: refsLoading } = useQuery({
     queryKey: ["referenceData"],
     queryFn: async () => {
-      const [usersRes, staffRes, servicesRes] = await Promise.all([
+      const [usersRes, staffRes, servicesRes, timeRes] = await Promise.all([
         api.getApiUser({ page: 1, pageSize: 1000 }, apiOptions),
         api.getApiStaff({ page: 1, pageSize: 1000 }, apiOptions),
         api.getApiAdminServices(apiOptions),
+        api.getApiTime({}, apiOptions),
       ]);
       const users = parseResponse<{ result?: { data?: User[] } }>(usersRes.data)?.result?.data ?? [];
       const staff = parseResponse<{ result?: { data?: Staff[] } }>(staffRes.data)?.result?.data ?? [];
       const services = parseResponse<{ result?: AdminServices[] }>(servicesRes.data)?.result ?? [];
+      const timeData = parseResponse<{ result?: TimeDto[] }>(timeRes.data)?.result ?? [];
       const customerMap: Record<string, User> = {};
       const staffMap: Record<string, Staff> = {};
       const serviceMap: Record<string, AdminServices> = {};
       const adminMap: Record<string, string> = {};
+      const timeMap: Record<string, TimeDto> = {};
+
       users.forEach((item) => {
         const id = String(item.id ?? "");
-        if ((item.role === 1 || item.role === 2) && item.salonName) adminMap[item.salonName] = id;
-        if (item.role === 4 && id) customerMap[id] = item;
+        if ((item.role === 1 || item.role === 2) && item.salonName && id) {
+          adminMap[item.salonName] = id;
+        }
+        if (item.role === 4 && id) {
+          customerMap[id] = item;
+        }
         if (item.role === 3 && item.employeeProfileId) {
           staffMap[String(item.employeeProfileId)] = {
             id: item.employeeProfileId,
@@ -92,12 +101,21 @@ const Bookings = () => {
       });
 
       staff.forEach((item) => {
-        if (item.id) staffMap[String(item.id)] = item;
+        if (item.id) {
+          staffMap[String(item.id)] = item;
+        }
       });
       services.forEach((item) => {
-        if (item.id && item.isActive !== false) serviceMap[String(item.id)] = item;
+        if (item.id && item.isActive !== false) {
+          serviceMap[String(item.id)] = item;
+        }
       });
-      return { customerMap, staffMap, serviceMap, adminMap };
+      timeData.forEach((item) => {
+        if (item.userId && item.day) {
+          timeMap[`${String(item.userId)}-${item.day}`] = item;
+        }
+      });
+      return { customerMap, staffMap, serviceMap, adminMap, timeMap };
     },
   });
 
@@ -115,7 +133,6 @@ const Bookings = () => {
       if (isCustomer) {
         bookings = bookings.filter(item => String(item.customerId ?? "") === String(userId ?? ""));
       }
-
       return {
         data: bookings.map((booking, index) => {
           const customer = refs?.customerMap[String(booking.customerId ?? "")];
@@ -123,7 +140,6 @@ const Bookings = () => {
           const ids = booking.serviceIds?.length ? booking.serviceIds : booking.serviceId ? [booking.serviceId] : [];
           const serviceName = ids.map(id => refs?.serviceMap[String(id)]?.serviceName).filter(Boolean).join(", ");
           const date = booking.appointmentDate ? dayjs(booking.appointmentDate).format("DD MMM YYYY") : "Invalid Date";
-
           return {
             ...booking,
             key: String(booking.id ?? `${pageParam}-${index}`),
@@ -154,6 +170,14 @@ const Bookings = () => {
 
   const bookings = useMemo(() => data?.pages.flatMap(page => page.data) ?? [], [data]);
   const { searchText, setSearchText, filteredData } = useSearch(bookings, ["customerName"], 500);
+  const getSalonTiming = (date: Dayjs | null) => {
+    if (!date || !refs || !selectedStaffId) return null;
+    const staff = refs.staffMap[String(selectedStaffId)];
+    if (!staff?.salonName) return null;
+    const adminId = refs.adminMap[String(staff.salonName)];
+    if (!adminId) return null;
+    return refs.timeMap[`${String(adminId)}-${date.format("dddd")}`] ?? null;
+  };
 
   const { data: existingBookings = [], isLoading: staffBookingsLoading } = useQuery({
     queryKey: ["staffBookings", selectedStaffId, selectedDate?.format("YYYY-MM-DD")],
@@ -179,18 +203,40 @@ const Bookings = () => {
     enabled: !!selectedStaffId && !!selectedDate && selectedServices.length > 0 && !!refs,
     queryFn: async () => {
       if (!refs || !selectedStaffId || !selectedDate) return [];
-      const staff = refs.staffMap[selectedStaffId];
-      if (!staff) throw new Error("Selected staff not found");
+      const staff = refs.staffMap[String(selectedStaffId)];
+      if (!staff) {
+        throw new Error("Selected staff not found");
+      }
       const adminId = refs.adminMap[String(staff.salonName ?? "")];
-      if (!adminId) throw new Error("Admin not found for selected salon");
+      if (!adminId) {
+        throw new Error("Admin not found for selected salon");
+      }
       const payload: SlotRequestDto = {
         userId: adminId,
         staffId: selectedStaffId,
-        date: selectedDate.toISOString(),
+        date: `${selectedDate.format("YYYY-MM-DD")}T12:00:00`,
         serviceIds: selectedServices,
       };
+
       const response = await api.postApiSlotAvailableSlots(payload, apiOptions);
-      return parseResponse<{ slots?: Slot[] }>(response.data)?.slots ?? [];
+      const parsed = parseResponse<{
+        status?: boolean;
+        message?: string;
+        slots?: Slot[];
+        result?: {
+          slots?: Slot[];
+        };
+      }>(response.data);
+      if (!parsed?.status) {
+        return [];
+      }
+
+      const apiSlots = Array.isArray(parsed.slots)
+        ? parsed.slots
+        : Array.isArray(parsed.result?.slots)
+          ? parsed.result.slots
+          : [];
+      return apiSlots.filter(slot => slot.isAvailable === true);
     },
     staleTime: 0,
   });
@@ -201,16 +247,17 @@ const Bookings = () => {
       if (!slot.isAvailable) return false;
       if (selectedDate?.isSame(now, "day")) {
         const start = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${slot.startTime}`);
-        if (start.isBefore(now)) return false;
+        if (start.isBefore(now)) {
+          return false;
+        }
       }
 
       return !existingBookings.some(booking => {
         if (!booking.startTime || !booking.endTime || !selectedDate) return false;
         const start = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${slot.startTime}`);
         const end = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${slot.endTime}`);
-        const bookingStart = dayjs(booking.startTime);
-        const bookingEnd = dayjs(booking.endTime).add(15, "minute");
-
+        const bookingStart = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${booking.startTime}`);
+        const bookingEnd = dayjs(`${selectedDate.format("YYYY-MM-DD")}T${booking.endTime}`).add(15, "minute");
         return start.isBefore(bookingEnd) && end.isAfter(bookingStart);
       });
     });
@@ -218,6 +265,10 @@ const Bookings = () => {
 
   const totalDuration = useMemo(
     () => selectedServices.reduce((total, id) => total + Number(refs?.serviceMap[String(id)]?.duration ?? 0), 0),
+    [selectedServices, refs]
+  );
+  const totalPrice = useMemo(
+    () => selectedServices.reduce((total, id) => total + Number(refs?.serviceMap[String(id)]?.price ?? 0), 0),
     [selectedServices, refs]
   );
 
@@ -283,11 +334,6 @@ const Bookings = () => {
     if (isAdmin && salonName && staff?.salonName !== salonName) {
       return void message.error("Selected staff does not belong to your salon");
     }
-
-    const amount = selectedServices.reduce(
-      (total, id) => total + Number(refs?.serviceMap[String(id)]?.price ?? 0),
-      0
-    );
     const bookingSalon = isSuperAdmin ? values.salonName?.trim() : salonName;
     const salonError = validateField("salonName", bookingSalon);
     if (salonError) return void message.warning(salonError);
@@ -295,10 +341,10 @@ const Bookings = () => {
       customerName: customerName.trim(),
       staffId: selectedStaffId!,
       serviceIds: selectedServices,
-      appointmentDate: selectedDate!.toISOString(),
+      appointmentDate: `${selectedDate!.format("YYYY-MM-DD")}T12:00:00`,
       startTime: selectedSlot!.startTime,
       endTime: selectedSlot!.endTime,
-      amount,
+      amount: totalPrice,
       salonName: bookingSalon!,
     });
   };
@@ -319,6 +365,27 @@ const Bookings = () => {
       })),
     [refs, isAdmin, salonName]
   );
+
+  const disabledDate = (date: Dayjs) => {
+    if (!date) return false;
+    if (date.isBefore(dayjs().startOf("day"))) {
+      return true;
+    }
+    if (!selectedStaffId || !refs) {
+      return false;
+    }
+    const staff = refs.staffMap[String(selectedStaffId)];
+    if (!staff?.salonName) {
+      return false;
+    }
+    const adminId = refs.adminMap[String(staff.salonName)];
+    if (!adminId) {
+      return true;
+    }
+    const dayInfo = refs.timeMap[`${String(adminId)}-${date.format("dddd")}`];
+    return !dayInfo || dayInfo.isOpen !== true;
+  };
+
   const pageLoading = (isLoading && !data) || refsLoading || staffBookingsLoading;
 
   return (
@@ -337,6 +404,7 @@ const Bookings = () => {
           )}
         </div>
       </div>
+
       <Card className="mb-6">
         <SearchInput searchText={searchText} onSearchChange={setSearchText} placeholder="Search customer..." />
       </Card>
@@ -375,7 +443,6 @@ const Bookings = () => {
           )}
         </div>
       </Card>
-
       {!isCustomer && (
         <ModalForm
           form={form}
@@ -403,10 +470,6 @@ const Bookings = () => {
             <label>Customer Name</label>
             <div className="p-2 bg-gray-50 rounded border">{editingBooking?.customerName}</div>
           </div>
-          <div className="mb-4">
-            <label>Service Name</label>
-            <div className="p-2 bg-gray-50 rounded border">{editingBooking?.serviceName}</div>
-          </div>
           <SelectField
             label="Status"
             name="status"
@@ -419,6 +482,7 @@ const Bookings = () => {
           />
         </ModalForm>
       )}
+
       {!isCustomer && (
         <ModalForm
           form={createForm}
@@ -470,6 +534,7 @@ const Bookings = () => {
                   value={selectedStaffId}
                   onChange={(value: string) => {
                     setSelectedStaffId(value);
+                    setSelectedDate(null);
                     setSelectedSlot(null);
                   }}
                   className="w-full"
@@ -489,7 +554,7 @@ const Bookings = () => {
                     setSelectedDate(date);
                     setSelectedSlot(null);
                   }}
-                  disabledDate={date => date.isBefore(dayjs().startOf("day"))}
+                  disabledDate={disabledDate}
                 />
               </div>
             </Col>
@@ -520,7 +585,6 @@ const Bookings = () => {
                         <div className="text-center">
                           <ClockCircleOutlined className="text-blue-500 mr-1" />
                           {slot.startTime} - {slot.endTime}
-
                           {selected && (
                             <Tag color="blue" className="mt-1 block">Selected</Tag>
                           )}
@@ -533,6 +597,25 @@ const Bookings = () => {
             </div>
           )}
 
+          {selectedDate && selectedStaffId && refs && (() => {
+            const dayInfo = getSalonTiming(selectedDate);
+            if (!dayInfo) {
+              return (
+                <Alert
+                  className="mb-4"
+                  message="Salon timing not found for selected day"
+                  type="warning"
+                  showIcon
+                />
+              );
+            }
+            return (
+              <div className="mb-4 text-sm text-gray-500">
+                Salon Timing: {dayInfo.opening} - {dayInfo.closing}
+              </div>
+            );
+          })()}
+
           {isSuperAdmin && (
             <InputField
               label="Salon Name"
@@ -541,7 +624,6 @@ const Bookings = () => {
               placeholder="Enter salon name"
             />
           )}
-
           <div className="bg-blue-50 p-3 rounded-lg border border-blue-200 mt-4">
             <p className="text-sm text-blue-700">
               <CalendarOutlined className="mr-1" />

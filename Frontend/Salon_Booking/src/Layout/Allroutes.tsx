@@ -20,6 +20,7 @@ import CustomerBookings from "../Pages/Customer/CustomerBooking";
 import EmployeeDeshbord from "../Pages/Employee/EmployeeDeshbord";
 import SuperAdminDeshbord from "../Pages/Superadmin/SuperadminDeshbord";
 import NotFound from "../Components/NotFound ";
+import ForgotPassword from "../Pages/Login/ForgotPassword";
 
 const Allrouts = () => {
   return (
@@ -76,6 +77,7 @@ const Allrouts = () => {
         <Route path="appointment" element={<CustomerAppointment />} />
       </Route>
       <Route path="*" element={<NotFound />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
     </Routes>
   );
 };

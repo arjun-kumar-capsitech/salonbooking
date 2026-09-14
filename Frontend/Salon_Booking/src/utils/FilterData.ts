@@ -7,6 +7,7 @@ export const useDebounce = <T>(value: T, delay: number = 500): T => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
+    
     timeoutRef.current = setTimeout(() => {
       setDebouncedValue(value);
     }, delay) as unknown as number;
@@ -54,7 +55,6 @@ export const useSearch = <T>(
 ) => {
   const [searchText, setSearchText] = useState('');
   const debouncedSearchText = useDebounce(searchText, delay);
-
   const filteredData = useMemo(() => {
     return filterData(data, debouncedSearchText, searchFields);
   }, [data, debouncedSearchText, searchFields]);

@@ -74,5 +74,11 @@ namespace SalonBackend.Models
 
         [BsonElement("Name")]
         public string? Name { get; set; }
+
+        [BsonElement("ResetPasswordToken")]
+        public string? ResetPasswordToken { get; set; }
+
+        [BsonElement("ResetPasswordTokenExpiry")]
+        public DateTime? ResetPasswordTokenExpiry { get; set; }
     }
 }

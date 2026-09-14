@@ -26,7 +26,6 @@ const parseResponse = <T,>(data: unknown): T | null => {
       return null;
     }
   }
-
   return data as T;
 };
 
@@ -57,7 +56,6 @@ const AdminIndex = () => {
       return {};
     }
   })();
-
   const userRole = user.Role ?? user.role;
   const userSalonName = user.SalonName ?? user.salonName;
   const isAdmin = userRole === "Admin" || userRole === 2;
@@ -152,21 +150,7 @@ const AdminIndex = () => {
     0
   );
   const monthlyData = (() => {
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-
+    const months = [ "Jan", "Feb", "Mar", "Apr","May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",];
     const revenueByMonth = new Array<number>(12).fill(0);
     bookings.forEach((booking) => {
       const date = new Date(booking.date);

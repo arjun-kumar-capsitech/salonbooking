@@ -11,7 +11,6 @@ const ProtectedRoute = ({ children, allowedRoles }: Props) => {
   const { user, isLoading } = useSelector(
     (state: any) => state.auth
   );
-
   const location = useLocation();
 
   if (isLoading) {
